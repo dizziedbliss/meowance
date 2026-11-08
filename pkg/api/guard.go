@@ -21,8 +21,13 @@ type guard struct {
 	window  time.Duration
 	now     func() time.Time
 	seq     uint64
-	cap     int // most keys tracked at once
+	cap     int       // most keys tracked at once
+	swept   time.Time // last full expiry sweep (sweeps are O(n), so they're throttled)
 }
+
+// sweepEvery limits full expiry sweeps when the table is full; between sweeps a
+// full table refuses new keys immediately instead of rescanning under the lock.
+const sweepEvery = 10 * time.Second
 
 type attempt struct {
 	at time.Time
@@ -84,8 +89,11 @@ func (g *guard) begin(key string) (t ticket, ok bool, wait time.Duration) {
 // evict frees room by dropping only keys whose attempts have all expired, so an
 // attacker can't flush someone's count by flooding junk keys. Callers hold g.mu.
 func (g *guard) evict() bool {
-	for k := range g.entries {
-		g.recent(k) // deletes the key when nothing is left in the window
+	if now := g.now(); now.Sub(g.swept) >= sweepEvery {
+		g.swept = now
+		for k := range g.entries {
+			g.recent(k) // deletes the key when nothing is left in the window
+		}
 	}
 	return len(g.entries) < g.cap
 }

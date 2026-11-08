@@ -86,4 +86,6 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Known issues
 
 - The guard is per warm instance, not global; the firewall rule is the cross-instance limit.
+- When its table is full of live counts (100k keys in 15 min) the guard fails closed: new USNs get
+  429 for up to a minute. Deliberate: fail-open was a bypass. Full sweeps are throttled to one per 10s.
 - Login is only as safe as MCE's (USN + birthday).

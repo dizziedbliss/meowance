@@ -156,6 +156,12 @@ func TestGuardFloodNeverFlushesCounts(t *testing.T) {
 	if n := len(g.entries["victim"]); n != 1 {
 		t.Fatalf("victim's count = %d after the flood, want 1 (it was flushed)", n)
 	}
+	// a full table doesn't rescan on every request: the next sweep waits sweepEvery
+	swept := g.swept
+	g.begin("another")
+	if g.swept != swept {
+		t.Fatal("swept again within sweepEvery")
+	}
 	// once the junk expires, room frees up and nothing was lost early
 	c.add(time.Hour + time.Second)
 	if _, ok, _ := g.begin("newcomer"); !ok {
