@@ -1,0 +1,12 @@
+# build output
+/demo
+/meowance
+*.exe
+
+# local-only / untracked data (never commit real student data or HARs)
+*.har
+/tmp-*
+
+# web
+web/node_modules/
+web/dist/

@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+/* Meowance tokens — dark only, sharp corners, one loud thing per screen. */
+@theme {
+  --color-night: #0b0a09;
+  --color-ink: #f1ebe2;
+  --color-ink-2: #b4ada1;
+  --color-mut: #77716a;
+  --color-hair: #221f1b;
+  --color-hair-2: #34302a;
+  --color-orange: #ff7700;
+  --color-orange-hi: #ff8a24;
+  --color-brown: #2e1b0d;
+  --color-brown-line: #5e3b1c;
+  --color-brown-focus: #3a220f;
+  --color-dead: #ff5a47;
+  --color-fine: #ffb23f;
+  --color-safe: #4bd69e;
+  --color-on-slab: #170805;
+  --color-cream: #fff6ee;
+
+  --font-display: "Archivo", "Arial Narrow", sans-serif;
+  --font-body: "Schibsted Grotesk", system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --font-sign: "Caveat", cursive;
+}
+
+@layer base {
+  html { color-scheme: dark; }
+  body {
+    @apply bg-night text-ink font-body antialiased;
+    line-height: 1.5;
+  }
+  /* soft fade behind the floating nav so it stays readable over content */
+  body.has-nav::after {
+    content: "";
+    position: fixed;
+    inset: auto 0 0 0;
+    height: 120px;
+    z-index: 20;
+    pointer-events: none;
+    background: linear-gradient(to top, var(--color-night) 30%, transparent);
+  }
+  :focus-visible { outline: 2px solid var(--color-orange); outline-offset: 3px; }
+  button { cursor: pointer; }
+}
+
+@layer components {
+  /* condensed giant numerals */
+  .numeral {
+    font-family: var(--font-display);
+    font-stretch: 64%;
+    font-weight: 850;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* tally: one square per class */
+  .tally { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+  .tally > i { width: 11px; height: 11px; flex: none; }
+  @media (min-width: 48rem) { .tally > i { width: 13px; height: 13px; } }
+  .tally > i.at { background: currentColor; }
+  .tally > i.ms { box-shadow: inset 0 0 0 1.5px currentColor; opacity: 0.45; }
+  .tally > i.nd { box-shadow: inset 0 0 0 1.5px var(--need, var(--color-orange)); }
+  .tally > i.sk {
+    box-shadow: inset 0 0 0 1.5px var(--color-safe);
+    background: repeating-linear-gradient(45deg, transparent 0 3px, rgb(75 214 158 / 0.35) 3px 4px);
+  }
+  .tally > .gap { width: 10px; flex: none; }
+  .tally > b { font-family: var(--font-mono); font-weight: 500; font-size: 11px; margin: 0 6px 0 2px; white-space: nowrap; }
+  .tally.on-slab { --need: var(--color-cream); }
+  .tally.on-slab > b { color: var(--color-cream); }
+  .tally.pop > i.nd {
+    animation: pop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    animation-delay: calc(var(--k) * 35ms + 350ms);
+  }
+
+  /* the period in "bunk." is a tiny cat that blinks */
+  .cat {
+    display: inline-block;
+    position: relative;
+    width: 0.19em;
+    height: 0.19em;
+    margin-left: 0.035em;
+    background:
+      radial-gradient(circle at 32% 48%, var(--color-night) 0 0.016em, transparent 0.018em),
+      radial-gradient(circle at 68% 48%, var(--color-night) 0 0.016em, transparent 0.018em),
+      var(--color-orange);
+  }
+  .cat::before,
+  .cat::after {
+    content: "";
+    position: absolute;
+    top: -0.06em;
+    width: 0.07em;
+    height: 0.065em;
+    background: var(--color-orange);
+    clip-path: polygon(50% 0, 100% 100%, 0 100%);
+  }
+  .cat::before { left: 0; }
+  .cat::after { right: 0; }
+  .cat > .lid { position: absolute; inset: 0 0 auto 0; height: 0; background: var(--color-orange); animation: blink 4s 1.2s infinite; }
+
+  /* community board feed */
+  .post { position: relative; padding: 0 0 28px 24px; }
+  .post::before { content: ""; position: absolute; left: 0; top: 6px; width: 9px; height: 9px; background: var(--color-hair-2); }
+  .post::after { content: ""; position: absolute; left: 4px; top: 22px; bottom: 2px; width: 1px; background: var(--color-hair); }
+  .post:last-child::after { display: none; }
+  .post.new::before { background: var(--color-orange); }
+}
+
+@keyframes pop { from { opacity: 0.15; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes blink { 0%, 90%, 100% { height: 0; } 94% { height: 62%; } }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

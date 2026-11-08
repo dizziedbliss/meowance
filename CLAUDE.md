@@ -1,0 +1,74 @@
+# meowance
+
+meow + attendance. A web app for MCE (Malnad College of Engineering) students: log in with your
+own USN + birthday, and it pulls your attendance from the college's Contineo portal and tells you
+how many classes you must attend (or can still skip) to stay out of the fine zone. Personal
+project, not public yet.
+
+Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.md`.
+
+## Commands
+
+- `go test ./...` / `go vet ./...` — Go tests and checks
+- `go run ./cmd/devserver` — local API on :8787 against the **real** portal
+- `go run ./cmd/devserver -fixture internal/portal/testdata/dashboard.html` — local API serving the
+  scrubbed fixtures (dashboard + `timetable.html` beside it) for any login (birthday `01012000`
+  simulates a wrong login). `-addr` changes the port.
+- `cd web && npm run dev` — Vite on **:5180** (all interfaces, so a Windows browser reaches it in
+  WSL), proxies `/api` to :8787, or to `$MEOWANCE_API`. `npm run preview` uses :5181.
+- `go run` doesn't reload: restart the dev server after Go changes. Stopping a `go run` task can
+  leave the compiled `devserver` running; check the port with `ss -ltnp` and kill that pid.
+- `cd web && npm test` / `npm run typecheck` / `npm run build`
+- `go run ./cmd/demo [dashboard.html]` — print the bunk table for a saved dashboard
+
+## Architecture
+
+- **`internal/portal`**: `client.go` logs into Contineo (GET login page → scrape Joomla CSRF token →
+  POST `username` + `passwd`=DOB `YYYY-MM-DD` → follow 303s) with a fresh cookie jar per call, one
+  retry on network failure only; then fetches this week's timetable and the calendar of events in
+  the same session, with the dashboard as Referer (best effort: nil on failure). `Client.Logf` logs
+  one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
+  dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
+  is never parsed); `calendar.go` the semester dates, holidays, exam days and events.
+- **`internal/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
+  target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.
+- **`internal/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY}` → `{student, courses, timetable}`
+  with `need75`, `need85`, `skip85` and `cie`/`cieTotal`/`cieMax` per course; `timetable` is null
+  when it couldn't be fetched. Validates MCE USNs (`4MC…`) and real dates. Error codes:
+  `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed` 502. `Cache-Control: no-store`.
+- **`api/attendance.go`**: the Vercel Go function; just wraps `internal/api` with the real client.
+- **`cmd/devserver`**: same handler locally, optional fixture mode.
+- **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
+  (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
+  zone (bunkable / show up / don't you dare); `lib/scores.ts` the CIE verdicts; `lib/events.ts`
+  working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats. `lib/vault.ts` keeps creds encrypted with a non-extractable
+  WebCrypto key (IndexedDB) and the last dashboard in localStorage; logout wipes both.
+
+## Conventions
+
+- **MCE rules:** 85%+ safe ("purring"); 75–85 fine zone (pays a fine unless back to 85); under 75 dead
+  zone (teachers cap at 75). Verdicts count **classes**, never days, and never assume how many
+  classes are left in the sem.
+- **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
+  screen, bottom nav is a background-less overlay. Copy is lowercase, dry gen-z; cat puns welcome
+  (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
+  student or lecturer photos. Dept = the 2 letters in the USN.
+- Credentials are never stored server-side or logged. Test fixtures are PII-scrubbed (USN
+  `4MC00AA000`, name `STUDENT`, every lecturer name `FACULTY`, all profile photos); never commit real
+  student data or HARs. Scrub by markup position, then grep for real names.
+- Go: stdlib-first. Web: exact-pinned deps, `npm ci`.
+
+## Not built yet
+
+- Timetable only shows the current week (no previous/next week).
+- Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
+  calendar) — the data is now fetched, the math isn't wired up.
+- Not deployed. `vercel.json` + `api/attendance.go` are untested on Vercel (Go 1.27 support and the
+  `internal/` import from `/api` are unverified until the first deploy).
+- Live login is verified only against a fake portal in tests; the real portal hasn't been hit by this
+  code yet.
+
+## Known issues (fine for a personal project, revisit before going public)
+
+- No rate limiting on `/api/attendance`; the upstream portal is flaky and easy to hammer.
+- Login is only as safe as MCE's (USN + birthday).
