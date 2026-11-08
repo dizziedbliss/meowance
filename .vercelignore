@@ -1,0 +1,9 @@
+# Never upload secrets, local Vercel state, deps, build output or captured traffic.
+.env*
+.vercel
+.git
+web/node_modules
+web/dist
+*.har
+# test-only fixtures are not needed in a deploy
+pkg/**/testdata

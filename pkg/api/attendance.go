@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dizziedbliss/meowance/internal/attend"
-	"github.com/dizziedbliss/meowance/internal/portal"
+	"github.com/dizziedbliss/meowance/pkg/attend"
+	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
 // Fetcher is what the handler needs from the portal (a real *portal.Client, or a fixture in dev).

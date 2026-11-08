@@ -1,4 +1,4 @@
-// Mirrors internal/api Response (Go). The server does the bunk math.
+// Mirrors pkg/api Response (Go). The server does the bunk math.
 export type Student = {
   usn: string;
   name: string;

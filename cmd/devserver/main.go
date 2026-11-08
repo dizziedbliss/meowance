@@ -16,8 +16,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/dizziedbliss/meowance/internal/api"
-	"github.com/dizziedbliss/meowance/internal/portal"
+	"github.com/dizziedbliss/meowance/pkg/api"
+	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
 type fixture struct{ dashboard, timetable, calendar string }

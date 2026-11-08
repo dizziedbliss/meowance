@@ -21,6 +21,7 @@ type guard struct {
 	window  time.Duration
 	now     func() time.Time
 	seq     uint64
+	cap     int // most keys tracked at once
 }
 
 type attempt struct {
@@ -34,12 +35,16 @@ type ticket struct {
 	id  uint64
 }
 
-// maxTracked bounds memory. When full, expired then unblocked keys are evicted;
-// keys that are currently blocked are never dropped.
-const maxTracked = 10_000
+// maxTracked bounds memory (~100k short keys is a few MB). Only expired keys are
+// ever evicted; a count is never forgotten before its window ends. If the table is
+// genuinely full of live counts, new keys are refused (fail closed) until room frees up.
+const maxTracked = 100_000
+
+// fullWait is the Retry-After for "table full": short, since entries expire continuously.
+const fullWait = time.Minute
 
 func newGuard(max int, window time.Duration, now func() time.Time) *guard {
-	return &guard{entries: map[string][]attempt{}, max: max, window: window, now: now}
+	return &guard{entries: map[string][]attempt{}, max: max, window: window, now: now, cap: maxTracked}
 }
 
 // recent drops attempts older than the window. Callers hold g.mu.
@@ -68,28 +73,21 @@ func (g *guard) begin(key string) (t ticket, ok bool, wait time.Duration) {
 	if len(r) >= g.max {
 		return ticket{}, false, r[0].at.Add(g.window).Sub(g.now())
 	}
-	if r == nil && len(g.entries) >= maxTracked && !g.evict() {
-		return ticket{}, true, 0 // table full of blocked keys: don't track this one
+	if r == nil && len(g.entries) >= g.cap && !g.evict() {
+		return ticket{}, false, fullWait // full of live counts: refuse rather than forget any
 	}
 	g.seq++
 	g.entries[key] = append(r, attempt{at: g.now(), id: g.seq})
 	return ticket{key: key, id: g.seq}, true, 0
 }
 
-// evict frees room: expired keys first, then keys that aren't blocked. Callers hold g.mu.
+// evict frees room by dropping only keys whose attempts have all expired, so an
+// attacker can't flush someone's count by flooding junk keys. Callers hold g.mu.
 func (g *guard) evict() bool {
 	for k := range g.entries {
-		g.recent(k)
+		g.recent(k) // deletes the key when nothing is left in the window
 	}
-	for k, v := range g.entries {
-		if len(g.entries) < maxTracked {
-			break
-		}
-		if len(v) < g.max {
-			delete(g.entries, k)
-		}
-	}
-	return len(g.entries) < maxTracked
+	return len(g.entries) < g.cap
 }
 
 // release gives back an attempt that wasn't a wrong birthday (portal down, etc.).

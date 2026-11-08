@@ -9,12 +9,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/dizziedbliss/meowance/internal/attend"
-	"github.com/dizziedbliss/meowance/internal/portal"
+	"github.com/dizziedbliss/meowance/pkg/attend"
+	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
 func main() {
-	path := "internal/portal/testdata/dashboard.html"
+	path := "pkg/portal/testdata/dashboard.html"
 	if len(os.Args) > 1 {
 		path = os.Args[1]
 	}

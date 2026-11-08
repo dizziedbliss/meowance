@@ -5,13 +5,14 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/dizziedbliss/meowance/internal/portal"
+	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
 type clock struct {
@@ -139,17 +140,25 @@ func TestLimiterSuccessAndOutagesDontCount(t *testing.T) {
 	}
 }
 
-// Filling the table must never drop a key that's currently blocked.
-func TestGuardEvictionKeepsBlocked(t *testing.T) {
+// Flooding the table with junk keys must never flush a live count (blocked or
+// partial); when it's full of live counts, new keys are refused, not tracked-free.
+func TestGuardFloodNeverFlushesCounts(t *testing.T) {
 	c := newClock()
-	g := newGuard(2, time.Hour, c.now)
-	g.begin("blocked")
-	g.begin("blocked")
-	for i := 0; len(g.entries) < maxTracked; i++ {
-		g.begin("k" + strings.Repeat("x", i%7) + string(rune(i)))
+	g := newGuard(3, time.Hour, c.now)
+	g.cap = 50
+	g.begin("victim") // a partial count: 1 of 3 used
+	for i := 0; len(g.entries) < g.cap; i++ {
+		g.begin("junk" + strconv.Itoa(i))
 	}
-	g.begin("one-more") // forces eviction
-	if _, ok, _ := g.begin("blocked"); ok {
-		t.Fatal("eviction dropped a blocked key")
+	if _, ok, wait := g.begin("newcomer"); ok || wait != fullWait {
+		t.Fatalf("full table: ok=%v wait=%v, want refused with %v", ok, wait, fullWait)
+	}
+	if n := len(g.entries["victim"]); n != 1 {
+		t.Fatalf("victim's count = %d after the flood, want 1 (it was flushed)", n)
+	}
+	// once the junk expires, room frees up and nothing was lost early
+	c.add(time.Hour + time.Second)
+	if _, ok, _ := g.begin("newcomer"); !ok {
+		t.Fatal("after expiry the table should have room again")
 	}
 }

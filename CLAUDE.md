@@ -11,7 +11,7 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 
 - `go test ./...` / `go vet ./...` — Go tests and checks
 - `go run ./cmd/devserver` — local API on :8787 against the **real** portal
-- `go run ./cmd/devserver -fixture internal/portal/testdata/dashboard.html` — local API serving the
+- `go run ./cmd/devserver -fixture pkg/portal/testdata/dashboard.html` — local API serving the
   scrubbed fixtures (dashboard + `timetable.html` beside it) for any login (birthday `01012000`
   simulates a wrong login). `-addr` changes the port.
 - `cd web && npm run dev` — Vite on **:5180** (all interfaces, so a Windows browser reaches it in
@@ -23,20 +23,20 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 
 ## Architecture
 
-- **`internal/portal`**: `client.go` logs into Contineo (GET login page → scrape Joomla CSRF token →
+- **`pkg/portal`**: `client.go` logs into Contineo (GET login page → scrape Joomla CSRF token →
   POST `username` + `passwd`=DOB `YYYY-MM-DD` → follow 303s) with a fresh cookie jar per call, one
   retry on network failure only; then fetches this week's timetable and the calendar of events in
   the same session, with the dashboard as Referer (best effort: nil on failure). `Client.Logf` logs
   one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
   dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
   is never parsed); `calendar.go` the semester dates, holidays, exam days and events.
-- **`internal/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
+- **`pkg/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
   target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.
-- **`internal/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY}` → `{student, courses, timetable}`
+- **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY}` → `{student, courses, timetable}`
   with `need75`, `need85`, `skip85` and `cie`/`cieTotal`/`cieMax` per course; `timetable` is null
   when it couldn't be fetched. Validates MCE USNs (`4MC…`) and real dates. Error codes:
   `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed` 502. `Cache-Control: no-store`.
-- **`api/attendance.go`**: the Vercel Go function; just wraps `internal/api` with the real client.
+- **`api/attendance.go`**: the Vercel Go function; just wraps `pkg/api` with the real client.
 - **`cmd/devserver`**: same handler locally, optional fixture mode.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
@@ -64,18 +64,23 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
   calendar) — the data is now fetched, the math isn't wired up.
 - Not deployed. `vercel.json` + `api/attendance.go` are untested on Vercel (Go 1.27 support and the
-  `internal/` import from `/api` are unverified until the first deploy).
+  `pkg/` import from `/api` are unverified until the first deploy).
 - Live login is verified only against a fake portal in tests; the real portal hasn't been hit by this
   code yet.
 
 ## Deploy (Vercel)
 
+- **Deploys only happen from the CLI**: `git.deploymentEnabled: false`, because Vercel aimed the first
+  branch push of the new project at production. Preview: `vercel deploy`. Production: `vercel deploy
+  --prod`, only with Max's OK. `.vercelignore` keeps `.env*`, `.vercel`, deps, builds and HARs out of uploads.
+- Shared Go code lives in `pkg/`, not `internal/`: Vercel compiles `/api` as its own package
+  (`handler/api`), and Go forbids it importing another module's `internal/`.
 - `vercel.json`: functions run in `bom1` (Mumbai, near the portal), 60s max; security headers on every
   path (CSP with `script-src 'self'`, so the build must never inline a script; `frame-ancestors 'none'`).
 - Brute-force guard: per 15 min, 5 wrong birthdays per (USN, client IP) and 20 per USN overall →
   429 `too_many_tries`, portal not contacted. Attempts are reserved before the portal call (no
   parallel bypass), released on outages, cleared on a correct login. Never evicts a blocked key.
-  (`internal/api/guard.go`, in-memory per instance). Pair it with a Vercel firewall per-IP rate limit
+  (`pkg/api/guard.go`, in-memory per instance). Pair it with a Vercel firewall per-IP rate limit
   on `/api/attendance`.
 
 ## Known issues

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dizziedbliss/meowance/internal/portal"
+	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
 type fakeFetcher struct {
