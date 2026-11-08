@@ -68,7 +68,15 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - Live login is verified only against a fake portal in tests; the real portal hasn't been hit by this
   code yet.
 
-## Known issues (fine for a personal project, revisit before going public)
+## Deploy (Vercel)
 
-- No rate limiting on `/api/attendance`; the upstream portal is flaky and easy to hammer.
+- `vercel.json`: functions run in `bom1` (Mumbai, near the portal), 60s max; security headers on every
+  path (CSP with `script-src 'self'`, so the build must never inline a script; `frame-ancestors 'none'`).
+- Brute-force guard: 5 wrong birthdays per USN per 15 min → 429 `too_many_tries`, portal not contacted
+  (`internal/api/guard.go`, in-memory per instance). Pair it with a Vercel firewall per-IP rate limit
+  on `/api/attendance`.
+
+## Known issues
+
+- The guard is per warm instance, not global; the firewall rule is the cross-instance limit.
 - Login is only as safe as MCE's (USN + birthday).

@@ -42,4 +42,11 @@ export type Calendar = { start: string; end: string; holidays: string[]; examDay
 /** timetable / calendar: null = couldn't fetch it this time; undefined = cached before they existed. */
 export type Attendance = { student: Student; courses: Course[]; timetable?: Day[] | null; calendar?: Calendar | null };
 
-export type ApiErrorCode = "bad_input" | "bad_login" | "portal_down" | "portal_changed" | "internal" | "network";
+export type ApiErrorCode =
+  | "bad_input"
+  | "bad_login"
+  | "too_many_tries"
+  | "portal_down"
+  | "portal_changed"
+  | "internal"
+  | "network";

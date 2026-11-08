@@ -10,6 +10,7 @@ export class ApiError extends Error {
 export const errorCopy: Record<ApiErrorCode, string> = {
   bad_input: "that doesn't look like an mce usn + ddmmyyyy birthday. check it.",
   bad_login: "portal said nope. usn or birthday's wrong.",
+  too_many_tries: "too many wrong birthdays for that usn. take 15 minutes, then try again.",
   portal_down: "the portal's down again. classic. try in a bit.",
   portal_changed: "the portal changed its look and we can't read it rn. we're on it.",
   internal: "something broke on our side. try again.",

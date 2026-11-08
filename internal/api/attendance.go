@@ -10,6 +10,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -71,14 +72,25 @@ const (
 	CodeBadLogin      = "bad_login"
 	CodePortalDown    = "portal_down"
 	CodePortalChanged = "portal_changed"
+	CodeTooManyTries  = "too_many_tries"
 	CodeInternal      = "internal"
 )
 
 // Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
 var reUSN = regexp.MustCompile(`^4MC[0-9]{2}[A-Z]{2}[0-9]{3}$`)
 
+// Wrong birthdays allowed per USN before it's paused, and for how long.
+const (
+	maxWrongTries = 5
+	triesWindow   = 15 * time.Minute
+)
+
 // Attendance returns the POST /api/attendance handler.
 func Attendance(f Fetcher) http.HandlerFunc {
+	return attendance(f, newGuard(maxWrongTries, triesWindow, time.Now))
+}
+
+func attendance(f Fetcher, g *guard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Cache-Control", "no-store")
 		if r.Method != http.MethodPost {
@@ -97,10 +109,19 @@ func Attendance(f Fetcher) http.HandlerFunc {
 			return
 		}
 
+		// Too many wrong birthdays for this USN lately: don't even ask the portal.
+		if blocked, wait := g.blocked(usn); blocked {
+			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
+			writeErr(w, http.StatusTooManyRequests, CodeTooManyTries)
+			return
+		}
+
 		snap, err := f.Fetch(r.Context(), usn, dob)
 		switch {
 		case err == nil:
+			g.reset(usn)
 		case errors.Is(err, portal.ErrBadLogin):
+			g.fail(usn)
 			writeErr(w, http.StatusUnauthorized, CodeBadLogin)
 			return
 		case errors.Is(err, portal.ErrPortalDown):
