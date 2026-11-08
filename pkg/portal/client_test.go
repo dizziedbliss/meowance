@@ -1,0 +1,194 @@
+package portal
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+)
+
+const (
+	testUSN   = "4MC00AA000"
+	testToken = "5cf5d64a03d1ecc7f4d09459f292ea8e"
+)
+
+var testDOB = time.Date(2004, time.August, 15, 0, 0, 0, 0, time.UTC)
+
+// fakePortal mimics the real flow: login page sets a session cookie, the POST
+// checks the token + credentials and 303s, the dashboard needs the session.
+func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
+	t.Helper()
+	dash, err := os.ReadFile(filepath.Join("testdata", "dashboard.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	tt, err := os.ReadFile(filepath.Join("testdata", "timetable.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cal, err := os.ReadFile(filepath.Join("testdata", "calendar.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var posts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sess, _ := r.Cookie("sess")
+		switch r.Method {
+		case http.MethodGet:
+			if c, _ := r.Cookie("in"); c != nil && sess != nil {
+				switch r.URL.Query().Get("task") {
+				case "timetable":
+					if timetableDown.Load() {
+						w.WriteHeader(http.StatusBadGateway)
+						return
+					}
+					w.Write(tt)
+				case "calenderdisplay":
+					w.Write(cal)
+				default:
+					w.Write(dash)
+				}
+				return
+			}
+			http.SetCookie(w, &http.Cookie{Name: "sess", Value: "s1", Path: "/"})
+			w.Write([]byte(loginPage))
+		case http.MethodPost:
+			atomic.AddInt32(&posts, 1)
+			r.ParseForm()
+			ok := sess != nil &&
+				r.PostForm.Get(testToken) == "1" &&
+				r.PostForm.Get("username") == testUSN &&
+				r.PostForm.Get("passwd") == "2004-08-15" &&
+				r.PostForm.Get("dd") == "15" && r.PostForm.Get("mm") == "08" && r.PostForm.Get("yyyy") == "2004" &&
+				r.PostForm.Get("option") == "com_user" && r.PostForm.Get("task") == "login" &&
+				r.PostForm["return"][0] == "LOGINRET"
+			if ok {
+				http.SetCookie(w, &http.Cookie{Name: "in", Value: "1", Path: "/"})
+				http.Redirect(w, r, "/parents/index.php?option=com_studentdashboard&task=dashboard", http.StatusSeeOther)
+				return
+			}
+			http.Redirect(w, r, "/parents/index.php", http.StatusSeeOther)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	return srv, &posts
+}
+
+func loginFixture(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("testdata", "login.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func newTestClient(base string) *Client {
+	return &Client{BaseURL: base + "/parents/index.php", Timeout: 5 * time.Second, Retries: 1, Backoff: time.Millisecond}
+}
+
+// timetableDown makes the fake portal fail only the timetable page.
+var timetableDown atomic.Bool
+
+func TestFetchSuccess(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	if err != nil {
+		t.Fatalf("Fetch: %v", err)
+	}
+	d := s.Dashboard
+	if len(d.Courses) != 5 || d.Courses[0].Code != "23AI701" || d.Courses[0].Attended != 20 {
+		t.Fatalf("unexpected dashboard: %+v", d.Courses)
+	}
+	if len(s.Timetable) != 4 || s.Timetable[0].Weekday != "Monday" {
+		t.Fatalf("timetable = %+v, want Mon–Thu", s.Timetable)
+	}
+	if s.Calendar == nil || s.Calendar.End != "2026-11-20" {
+		t.Fatalf("calendar = %+v, want sem ending 2026-11-20", s.Calendar)
+	}
+}
+
+func TestFetchLogsNeverLeakSession(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	var lines []string
+	c := newTestClient(srv.URL)
+	c.Logf = func(f string, a ...any) { lines = append(lines, fmt.Sprintf(f, a...)) }
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB); err != nil {
+		t.Fatal(err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("want one log line per extra page, got %q", lines)
+	}
+	for _, l := range lines {
+		if strings.Contains(l, testUSN) || strings.Contains(l, "2004") || strings.Contains(l, "http") {
+			t.Errorf("log line leaks credentials or a URL: %q", l)
+		}
+	}
+}
+
+func TestFetchTimetableIsBestEffort(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	timetableDown.Store(true)
+	defer timetableDown.Store(false)
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	if err != nil {
+		t.Fatalf("a broken timetable page must not fail the login: %v", err)
+	}
+	if s.Timetable != nil || len(s.Dashboard.Courses) != 5 {
+		t.Fatalf("want dashboard with nil timetable, got timetable=%v", s.Timetable)
+	}
+}
+
+func TestFetchBadLogin(t *testing.T) {
+	srv, posts := fakePortal(t, loginFixture(t))
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1))
+	if !errors.Is(err, ErrBadLogin) {
+		t.Fatalf("err = %v, want ErrBadLogin", err)
+	}
+	if *posts != 1 {
+		t.Fatalf("posted %d times; a bad login must not be retried", *posts)
+	}
+}
+
+func TestFetchNoToken(t *testing.T) {
+	srv, _ := fakePortal(t, "<html><form id=\"login-form\"></form></html>")
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	if !errors.Is(err, ErrPortalChanged) {
+		t.Fatalf("err = %v, want ErrPortalChanged", err)
+	}
+}
+
+func TestFetchPortalDownRetries(t *testing.T) {
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	if !errors.Is(err, ErrPortalDown) {
+		t.Fatalf("err = %v, want ErrPortalDown", err)
+	}
+	if hits != 2 {
+		t.Fatalf("hits = %d, want 2 (one try + one retry)", hits)
+	}
+}
+
+func TestFetchSessionsDoNotLeak(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	c := newTestClient(srv.URL)
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB); err != nil {
+		t.Fatal(err)
+	}
+	// Same client, wrong DOB: must not ride the previous session's cookies.
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1)); !errors.Is(err, ErrBadLogin) {
+		t.Fatalf("second fetch err = %v, want ErrBadLogin (session leaked?)", err)
+	}
+}

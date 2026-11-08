@@ -1,0 +1,26 @@
+<html lang="en">
+<head><title>Contineo - Bringing Happiness to work and study places!</title></head>
+<body id="">
+<form action="index.php" method="POST" name="log">
+<input type="hidden" name="option" value="com_user">
+<input type="hidden" name="task" value="logout">
+<input type="hidden" name="return" value="LOGOUTRET">
+</form>
+<script src="https://www.google.com/recaptcha/api.js?onload=onloadCallback" async defer></script>
+<form id="login-form" class="cn-landing-login" action="index.php" method="post"  >
+  <h3>Login to Your Account</h3>
+  <input class="uk-input" type="text" required AUTOCOMPLETE="off" name="username" id="username"  placeholder="USN">
+  <select name="dd" id="dd"><option disabled selected value=''>Day</option><option value='15'>15</option></select>
+  <select name="mm" id="mm"><option disabled selected value=''>Month</option><option value='08'>Aug</option></select>
+  <select name="yyyy" id="yyyy" onchange="putdate()"><option disabled selected value=''> Year </option><option value='2004'>2004</option></select>
+  <input type="hidden" id="remember" name="remember" value="No" alt="Remember Me" readonly>
+  <input type="submit" value="Login" onClick="return check()">
+  <input type="hidden"  id="passwd" name="passwd" AUTOCOMPLETE="off" readonly >
+  <input type="hidden" name="option" value="com_user" readonly >
+  <input type="hidden" name="task" value="login" readonly >
+  <input type="hidden" name="return" value="LOGINRET" readonly >
+  <input type="hidden" name="return" value="" readonly />
+  <input type="hidden" name="5cf5d64a03d1ecc7f4d09459f292ea8e" value="1" />
+</form>
+</body>
+</html>
