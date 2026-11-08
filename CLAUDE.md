@@ -63,13 +63,18 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - Timetable only shows the current week (no previous/next week).
 - Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
   calendar) — the data is now fetched, the math isn't wired up.
-- Not deployed. `vercel.json` + `api/attendance.go` are untested on Vercel (Go 1.27 support and the
-  `pkg/` import from `/api` are unverified until the first deploy).
+- A real login through production hasn't been verified yet: the portal was down at launch, so it's
+  unknown whether it accepts Vercel's Mumbai IPs (a 502 `portal_down` from prod while a local login
+  works would mean it blocks them).
 - Live login is verified only against a fake portal in tests; the real portal hasn't been hit by this
   code yet.
 
 ## Deploy (Vercel)
 
+- **Live:** https://meowance.vercel.app (project `dizziedbliss/meowance`, first deployed 2026-11-09).
+  Firewall rule "attendance api limit": 60 requests/min per IP on `/api/attendance`, deny when
+  exceeded (college Wi-Fi puts everyone behind one IP, so keep it generous). Previews are behind
+  Vercel Authentication; use `vercel curl <url>` to test them.
 - **Deploys only happen from the CLI**: `git.deploymentEnabled: false`, because Vercel aimed the first
   branch push of the new project at production. Preview: `vercel deploy`. Production: `vercel deploy
   --prod`, only with Max's OK. `.vercelignore` keeps `.env*`, `.vercel`, deps, builds and HARs out of uploads.
