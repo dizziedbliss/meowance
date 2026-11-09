@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"io"
 	"net"
 	"net/http"
@@ -36,6 +37,9 @@ var (
 	reLoginForm = regexp.MustCompile(`(?s)<form[^>]+id="login-form".*?</form>`)
 	reReturn    = regexp.MustCompile(`name="return"\s+value="([^"]*)"`)
 )
+
+// The portal's HTML <title> for fetching errors
+var titleRe = regexp.MustCompile(`(?s)<title>(.*?)</title>`)
 
 // Client logs into the portal and fetches one student's dashboard.
 // It is safe for concurrent use: every Fetch gets its own cookie jar, so one
@@ -228,13 +232,29 @@ func netKind(err error) string {
 	return "network error"
 }
 
+func pageTitle(body []byte) string {
+	m := titleRe.FindSubmatch(body)
+	if m == nil {
+		return "(no title)"
+	}
+	t := html.UnescapeString(strings.TrimSpace(string(m[1])))
+	if len(t) > 80 {
+		t = t[:80]
+	}
+	return t
+}
+
+
 func readBody(resp *http.Response) (string, error) {
 	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	
 	if resp.StatusCode >= 500 {
 		return "", fmt.Errorf("%w: status %d", ErrPortalDown, resp.StatusCode)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("%w: status %d", ErrPortalChanged, resp.StatusCode)
+		return "", fmt.Errorf("%w: status %d, title %q", ErrPortalChanged, resp.StatusCode, pageTitle(body))
 	}
 	b, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
