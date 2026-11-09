@@ -75,6 +75,7 @@ const (
 	CodePortalChanged = "portal_changed"
 	CodeTooManyTries  = "too_many_tries"
 	CodeInternal      = "internal"
+	CodeForbidden     = "portal_blocked"
 )
 
 // Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
@@ -128,7 +129,10 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 		case err == nil:
 		case errors.Is(err, portal.ErrPortalDown):
 			writeErr(w, http.StatusBadGateway, CodePortalDown)
-			return 
+			return
+		case errors.Is(err, portal.ErrForbidden):
+			writeErr(w, http.StatusForbidden, CodeForbidden)
+			return
 		case errors.Is(err, portal.ErrPortalChanged):
 			writeErr(w, http.StatusBadGateway, CodePortalChanged)
 			return

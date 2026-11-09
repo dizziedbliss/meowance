@@ -49,4 +49,5 @@ export type ApiErrorCode =
   | "portal_down"
   | "portal_changed"
   | "internal"
-  | "network";
+  | "network"
+  | "portal_blocked";

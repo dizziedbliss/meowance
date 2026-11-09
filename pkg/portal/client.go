@@ -26,9 +26,12 @@ var (
 	ErrPortalDown = errors.New("portal: unreachable")
 	// ErrPortalChanged: the portal answered but its markup isn't what we parse.
 	ErrPortalChanged = errors.New("portal: page layout changed")
+	// ErrForbidden: the portal returned a 403 Forbidden error.
+	ErrForbidden = errors.New("portal: access forbidden")
 )
 
 const maxBody = 5 << 20 // 5 MB; the dashboard is ~60 KB
+const userAgent = "Mozilla/5.0 (Linux; Android10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
 var (
 	// Joomla's CSRF token: a hidden input whose name is 32 hex chars and value is 1.
@@ -39,7 +42,7 @@ var (
 )
 
 // The portal's HTML <title> for fetching errors
-var titleRe = regexp.MustCompile(`(?s)<title>(.*?)</title>`)
+var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
 // Client logs into the portal and fetches one student's dashboard.
 // It is safe for concurrent use: every Fetch gets its own cookie jar, so one
@@ -74,6 +77,13 @@ type Snapshot struct {
 	Timetable []Day
 	// Calendar is the semester's calendar of events, or nil if it couldn't be fetched.
 	Calendar *Calendar
+}
+
+// Helper function for setting up headers, since without any headers, the website blocks incoming request as marking it as a bot call. This function sets up the headers for the request to the portal.
+func setHeaders(req *http.Request) {
+	req.Header.Set("User-Agent", userAgent)
+	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
 }
 
 // Fetch logs in with usn + dob and returns the parsed dashboard plus this week's
@@ -135,8 +145,8 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time) (*Sna
 	if err != nil {
 		return nil, err
 	}
+	setHeaders(req)
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Referer", c.BaseURL)
 	resp, err := hc.Do(req) // follows the 303s to the dashboard, cookies included
 	if err != nil {
@@ -202,14 +212,12 @@ func pageKind(html string) string {
 	return "unknown page"
 }
 
-const userAgent = "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36"
-
 func (c *Client) get(ctx context.Context, hc *http.Client, u, referer string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", userAgent)
+	setHeaders(req)
 	if referer != "" {
 		req.Header.Set("Referer", referer)
 	}
@@ -244,21 +252,22 @@ func pageTitle(body []byte) string {
 	return t
 }
 
-
 func readBody(resp *http.Response) (string, error) {
 	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-	
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
+
 	if resp.StatusCode >= 500 {
 		return "", fmt.Errorf("%w: status %d", ErrPortalDown, resp.StatusCode)
+	}
+	if resp.StatusCode == http.StatusForbidden {
+		return "", fmt.Errorf("%w: status %d, title %q", ErrForbidden, resp.StatusCode, pageTitle(body))
 	}
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("%w: status %d, title %q", ErrPortalChanged, resp.StatusCode, pageTitle(body))
 	}
-	b, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	if err != nil {
 		return "", fmt.Errorf("%w: %s", ErrPortalDown, netKind(err))
 	}
-	return string(b), nil
+	return string(body), nil
 }
