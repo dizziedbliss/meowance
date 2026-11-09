@@ -2,6 +2,8 @@ package portal
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"html"
@@ -10,6 +12,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -66,7 +69,58 @@ func (c *Client) logf(format string, args ...any) {
 
 // NewClient returns a Client for the real portal.
 func NewClient() *Client {
-	return &Client{BaseURL: DefaultBaseURL, Timeout: 25 * time.Second, Retries: 1, Backoff: 1500 * time.Millisecond}
+	// Initialize default configuration parameters
+	client := &Client{
+		BaseURL: DefaultBaseURL,
+		Timeout: 25 * time.Second,
+		Retries: 1,
+		Backoff: 1500 * time.Millisecond,
+	}     
+
+	// 1. Fetch credentials safely from the environment
+	username := os.Getenv("OXYLABS_USERNAME")
+	password := os.Getenv("OXYLABS_PASSWORD")
+
+	if username == "" || password == "" {
+		client.logf("Warning: OXYLABS_USERNAME or OXYLABS_PASSWORD not set. Running without proxy.")
+		client.Transport = http.DefaultTransport
+		return client
+	}
+
+	// 2. Generate a secure, unique session ID for stickiness
+	b := make([]byte, 8)
+	var sessionID string
+	if _, err := rand.Read(b); err != nil {
+		sessionID = "defaultsessionfallback"
+	} else {
+		sessionID = hex.EncodeToString(b)
+	}
+
+	const country = "in"
+	const city = "bengaluru"
+	const proxyAddress = "pr.oxylabs.io:7777"
+
+	// 3. Format the authenticated, sticky proxy string
+	proxyAuthStr := fmt.Sprintf("customer-%s-cc-%s-city-%s-sessid-%s", username, country, city, sessionID)
+	proxyUrl, err := url.Parse(fmt.Sprintf("http://%s:%s@%s", proxyAuthStr, password, proxyAddress))
+
+	if err != nil {
+		client.logf("Error parsing proxy URL: %v. Falling back to default transport.", err)
+		client.Transport = http.DefaultTransport
+		return client
+	}
+
+	// 4. Inject the custom proxy transport layer straight into the struct
+	client.Transport = &http.Transport{
+		Proxy: http.ProxyURL(proxyUrl),
+		// Tuning parameters for reliable residential connection handling
+		MaxIdleConns:          10,
+		IdleConnTimeout:       30 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ExpectContinueTimeout: 1 * time.Second,
+	}
+
+	return client
 }
 
 // Snapshot is everything one login fetches.
@@ -84,6 +138,8 @@ func setHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	// req.Header.Set("Accept-Encoding", "gzip, deflate, br")
+	req.Header.Set("Connection", "keep-alive")
 }
 
 // Fetch logs in with usn + dob and returns the parsed dashboard plus this week's

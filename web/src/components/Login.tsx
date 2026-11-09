@@ -103,11 +103,9 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
 
         <aside aria-label="Community board" className="border-t border-hair-2 pt-[34px] md:border-t-0 md:border-l md:pt-0 md:pl-10">
           <h2 className="font-display text-[40px] font-black leading-[.9] tracking-[-.02em] [font-stretch:80%]">
-            community
-            <br />
-            board
-          </h2>
-          <div className="mt-2.5 mb-7 font-mono text-xs text-mut">the tea, straight from max</div>
+            Changelogs
+           </h2>
+          <div className="mt-2.5 mb-7 font-mono text-xs text-mut">What happened??</div>
           {posts.map((p, i) => (
             <article key={p.title} className={`post ${i === 0 ? "new" : ""}`}>
               <div className="flex gap-2.5 font-mono text-[11px] text-mut">
@@ -116,7 +114,7 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
               </div>
               <h3 className="mt-1 font-display text-[21px] font-extrabold leading-[1.15] tracking-[-.01em]">{p.title}</h3>
               <p className="mt-1 text-sm text-ink-2">{p.body}</p>
-              {p.signed && <div className="mt-1 font-sign text-[21px] leading-none text-orange">— Max!!</div>}
+              <div className="mt-1 font-sign text-[21px] leading-none text-orange">{p.sign}</div>
             </article>
           ))}
         </aside>
