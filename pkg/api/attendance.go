@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"log"
 	"math"
 	"net/http"
 	"regexp"
@@ -120,11 +121,14 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			return
 		}
 		lim.done(p, usn, ip, err == nil)
+		if err != nil {
+			log.Printf("fetch Failed: %v", err)
+		}
 		switch {
 		case err == nil:
 		case errors.Is(err, portal.ErrPortalDown):
 			writeErr(w, http.StatusBadGateway, CodePortalDown)
-			return
+			return 
 		case errors.Is(err, portal.ErrPortalChanged):
 			writeErr(w, http.StatusBadGateway, CodePortalChanged)
 			return
