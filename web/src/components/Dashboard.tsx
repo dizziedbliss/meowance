@@ -26,14 +26,14 @@ export function Dashboard({ data }: { data: Attendance }) {
       )}
 
       <footer className="mt-10 grid gap-1.5 md:grid-cols-[140px_minmax(0,1fr)] md:gap-5">
-        <span className="font-mono text-xs text-mut">the fine print</span>
+        <span className="font-mono text-xs text-mut">facts to know</span>
         <div className="max-w-[68ch] space-y-2 text-[13.5px] text-ink-2">
           <p>we're not mce. not affiliated, not sponsored, not even friends. just kids who got tired of doing this math by hand.</p>
           <p>
-            we don't keep your data. usn and birthday go in, attendance comes out, we forget you exist. your attendance keeps
-            receipts. <strong className="text-ink">we don't.</strong>
+            we don't keep your data, never. usn and birthday go in, attendance come out, we forget you even exist. your attendance keeps
+            the bill. <strong className="text-ink">we don't.</strong>
           </p>
-          <p>use your own usn. snooping on someone else's is weird and lowkey a crime. don't be that guy.</p>
+          <p>use your own usn. stalking on someone else's is weird wihtout their permission. don't be that guy.</p>
         </div>
       </footer>
     </>

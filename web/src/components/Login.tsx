@@ -32,14 +32,16 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
     const now = new Date();
     const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC + 5:30
     const istTime = new Date(now.getTime() + istOffset);
-    const istHour = istTime.getHours();
+    const istHour = istTime.getUTCHours();
     const hour = istHour >= 24 ? istHour - 24 : istHour;
 
     let message: React.ReactNode;
 
-    if (hour >= 0 && hour < 1) {
-      message = (<div className="mb-6 mt-4 max-w-[56ch] space-y-2 text-[13.5px]">
-          Sources (or past experience) say that <em className="not-italic text-orange">after 12AM till somewhere around 6AM</em> MCE needs to sleep, so you can't access your data, nor can <em className="not-italic text-orange">we</em> do.
+    if (hour >= 0 && hour < 6) {
+      message = (<div className="mb-6 mt-4 max-w-[66ch] space-y-2 text-[13.5px] border pt-2 pb-2 pl-5 pr-5 border-orange">
+          <em className="not-italic text-orange">NOTICE:</em>
+            <p> Sources (or past experience) say that <em className="not-italic text-orange">after 12AM till somewhere around 6AM</em> MCE needs to sleep, so you can't access your data, nor can <em className="not-italic text-orange">we</em> do, uhmm u can test it tho, ur luck <span className="text-[10px]">(or maybe I'm too lazy to code smth to hide login at this hour)</span>.
+          </p>
         </div>);
     }
   
@@ -66,7 +68,7 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
             </span>
           </h1>
           <p className="mb-[34px] max-w-[26ch] font-display text-[clamp(22px,2.4vw,28px)] font-bold leading-[1.15] tracking-[-.01em]">
-            how many classes can you can <em className="not-italic text-orange">skip</em> before mce sends the <em className="not-italic text-orange">fine</em>? we did
+            how many classes you can <em className="not-italic text-orange">skip</em> before mce sends the <em className="not-italic text-orange">fine</em>? we did
             the math. you do the bunking.
           </p>
 
@@ -113,8 +115,9 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
           </form>
 
           <div className="mt-4 max-w-[56ch] space-y-2 text-[13.5px] text-mut">
-            <p>your usn and birthday pass through our server once, then we forget you exist. no database, no receipts.</p>
-            <p>not vibing with that? don't log in, valid. using someone else's usn? weird. don't.</p>
+            <p>Your usn and birthday pass through our server once, then we forget you exist. no database, no receipts.</p>
+            <p>Still scared to try? don't log in. </p>
+            <p>Trying to use someone else's usn? weird. please don't stalk.</p>
           </div>
         </div>
 

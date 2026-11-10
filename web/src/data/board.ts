@@ -8,6 +8,12 @@ export type Post = {
 
 export const posts: Post[] = [
   {
+    when: "11 nov (midnight ffs)",
+    title: "Midnight Struggles",
+    body: "Bro was trying so hard to block us, let them try blocking whole internet now, oh also found out some sneaky lil bugs- smashed em heh-",
+    sign: "Max!!",
+  },
+  {
     when: "9 nov",
     title: "Contineo was trying to block ussss",
     body: "Bro was trying to block us, but we're too cool for that.",
@@ -34,7 +40,7 @@ export const posts: Post[] = [
   },
   {
     when: "7 nov",
-    title: "the portal's back",
+    title: "the contineo's back",
     body: "came back from the dead. so did we, no cap.",
     sign: "Max!!",
   },
