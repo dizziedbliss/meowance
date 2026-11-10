@@ -15,6 +15,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -56,6 +57,11 @@ type Client struct {
 	Timeout   time.Duration
 	Retries   int           // extra attempts after a network failure (not after a bad login)
 	Backoff   time.Duration // wait between attempts
+
+	//for proxy refreshing and retry with new one
+	mu        sync.Mutex
+	sessionID string
+	expiresAt time.Time
 	// Logf, if set, gets one line per extra page (timetable, calendar): status, size,
 	// what was parsed. Never credentials, never URLs (they carry the session).
 	Logf func(format string, args ...any)
@@ -67,15 +73,33 @@ func (c *Client) logf(format string, args ...any) {
 	}
 }
 
+func genrateSessionID() string {
+	b := make([]byte, 8)
+	var sessionID string
+	if _, err := rand.Read(b); err != nil {
+		sessionID = "defaultsessionfallback"
+	} else {
+		sessionID = hex.EncodeToString(b)
+	}
+	return sessionID
+}
+
+func (c *Client) RotateIP() {
+	c.mu.Lock()
+	c.sessionID = genrateSessionID()
+	c.expiresAt = time.Now().Add(5 * time.Minute)
+	c.mu.Unlock()
+}
+
 // NewClient returns a Client for the real portal.
 func NewClient() *Client {
 	// Initialize default configuration parameters
 	client := &Client{
 		BaseURL: DefaultBaseURL,
 		Timeout: 25 * time.Second,
-		Retries: 1,
+		Retries: 5,
 		Backoff: 1500 * time.Millisecond,
-	}     
+	}
 
 	// 1. Fetch credentials safely from the environment
 	username := os.Getenv("OXYLABS_USERNAME")
@@ -87,7 +111,7 @@ func NewClient() *Client {
 		return client
 	}
 
-	// 2. Generate a secure, unique session ID for stickiness
+	// 2. Generate a secure, unique session ID for stickines
 	b := make([]byte, 8)
 	var sessionID string
 	if _, err := rand.Read(b); err != nil {
@@ -209,9 +233,40 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time) (*Sna
 		return nil, fmt.Errorf("%w: %s", ErrPortalDown, netKind(err))
 	}
 	dashURL := resp.Request.URL.String() // final, signed dashboard URL: the Referer for later pages
-	body, err := readBody(resp)
-	if err != nil {
-		return nil, err
+	var body string
+	var lastErr error
+
+	for attempt := 0; attempt <= c.Retries; attempt++ {
+		if attempt > 0 && req.GetBody != nil {
+			newBody, err := req.GetBody()
+			if err != nil {
+				return nil, err
+			}
+			req.Body = newBody
+		}
+		resp, err = hc.Do(req)
+		if err != nil {
+			lastErr = err
+			time.Sleep(c.Backoff)
+			continue
+		}
+
+		body, err = readBody(resp)
+		resp.Body.Close()
+
+		if resp.StatusCode == http.StatusForbidden {
+			c.logf("Got 403 Forbidden (attempt %d/%d). Rotating sessionID...", attempt+1, c.Retries+1) 
+			c.RotateIP()
+			req.Close = true
+			body, err = readBody(resp)
+			lastErr = fmt.Errorf("%w: status %d", ErrForbidden, resp.StatusCode)
+			time.Sleep(c.Backoff)
+			continue
+		}
+		if err != nil {
+			lastErr = err
+			return nil, lastErr
+		}
 	}
 
 	// 3. Parse. A login page coming back means the portal said no.
