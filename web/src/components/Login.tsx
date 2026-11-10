@@ -29,6 +29,21 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
     }
   }
 
+    const now = new Date();
+    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC + 5:30
+    const istTime = new Date(now.getTime() + istOffset);
+    const istHour = istTime.getHours();
+    const hour = istHour >= 24 ? istHour - 24 : istHour;
+
+    let message: React.ReactNode;
+
+    if (hour >= 0 && hour < 1) {
+      message = (<div className="mb-6 mt-4 max-w-[56ch] space-y-2 text-[13.5px]">
+          Sources (or past experience) say that <em className="not-italic text-orange">after 12AM till somewhere around 6AM</em> MCE needs to sleep, so you can't access your data, nor can <em className="not-italic text-orange">we</em> do.
+        </div>);
+    }
+  
+
   const field =
     "w-full rounded-none border border-brown-line bg-brown px-4 py-[15px] font-mono text-[17px] tracking-[.04em] text-ink outline-none placeholder:text-[#8a6a4a] focus:border-orange focus:bg-brown-focus";
 
@@ -51,9 +66,11 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
             </span>
           </h1>
           <p className="mb-[34px] max-w-[26ch] font-display text-[clamp(22px,2.4vw,28px)] font-bold leading-[1.15] tracking-[-.01em]">
-            how many classes can you skip before mce sends the <em className="not-italic text-orange">fine</em>? we did
+            how many classes can you can <em className="not-italic text-orange">skip</em> before mce sends the <em className="not-italic text-orange">fine</em>? we did
             the math. you do the bunking.
           </p>
+
+          {message}
 
           <form onSubmit={submit} noValidate className="max-w-[560px]">
             <div className="mb-3 grid gap-3 md:grid-cols-[1.2fr_1fr]">
