@@ -72,7 +72,7 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   "facts to know": a prediction mustn't talk anyone out of classes, and teachers rarely take or
   enter every planned class. Never use the portal's "still to go" as classes really left: it's stale.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
-  screen, bottom nav is an overlay with its own solid background (it mustn't blend in). No endless
+  screen, bottom nav is an overlay on a solid logo-orange (#FF7700) bar with dark text (it mustn't blend in). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
   (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.

@@ -120,7 +120,7 @@ func (s *Resend) Send(ctx context.Context, usn, message string) error {
 		"from":    s.From,
 		"to":      []string{s.To},
 		"subject": "meowance feedback from " + usn,
-		"text":    fmt.Sprintf("from: %s\n\n%s\n", usn, message),
+		"text":    fmt.Sprintf("from: %s (as sent by the browser, not verified)\n\n%s\n", usn, message),
 	})
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, s.BaseURL+"/emails", bytes.NewReader(body))
 	if err != nil {

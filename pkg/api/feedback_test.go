@@ -127,7 +127,7 @@ func TestResendRequest(t *testing.T) {
 	if got.auth != "Bearer re_test" || got.ctype != "application/json" {
 		t.Errorf("headers: %q %q", got.auth, got.ctype)
 	}
-	if got.body["subject"] != "meowance feedback from 4MC00AA000" || got.body["text"] != "from: 4MC00AA000\n\n<b>hi</b>\n" || got.body["html"] != nil {
+	if got.body["subject"] != "meowance feedback from 4MC00AA000" || got.body["text"] != "from: 4MC00AA000 (as sent by the browser, not verified)\n\n<b>hi</b>\n" || got.body["html"] != nil {
 		t.Errorf("body: %v (plain text only, never html)", got.body)
 	}
 	if to, _ := got.body["to"].([]any); len(to) != 1 || to[0] != "inbox@example.com" {

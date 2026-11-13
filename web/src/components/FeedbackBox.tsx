@@ -41,7 +41,7 @@ export function FeedbackBox({ usn }: { usn: string }) {
             if (state === "sent") setState("idle");
           }}
           placeholder="bugs, ideas, roasts. max reads all of it."
-          className="block w-full resize-y rounded-none border border-brown-line bg-brown px-4 py-3 text-[14px] text-ink outline-none placeholder:text-[#8a6a4a] focus:border-orange focus:bg-brown-focus"
+          className="block w-full resize-y rounded-none border-2 border-orange bg-orange px-4 py-3 text-[14px] text-on-slab outline-none placeholder:text-on-slab/55 focus:border-cream"
         />
         <div className="mt-2 flex flex-wrap items-center justify-between gap-3">
           <span className="font-mono text-[11px] text-mut">
@@ -50,7 +50,7 @@ export function FeedbackBox({ usn }: { usn: string }) {
           <button
             type="submit"
             disabled={!text.trim() || state === "sending"}
-            className="bg-orange px-4 py-2 font-display text-sm font-extrabold text-on-slab hover:bg-orange-hi disabled:cursor-not-allowed disabled:opacity-40"
+            className="border-2 border-orange bg-night px-4 py-2 font-display text-sm font-extrabold text-orange hover:bg-orange hover:text-on-slab disabled:cursor-not-allowed disabled:opacity-40"
           >
             {state === "sending" ? "sending…" : "send it"}
           </button>
