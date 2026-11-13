@@ -13,6 +13,7 @@ import (
 	"os"
 	"regexp"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -57,6 +58,8 @@ type Client struct {
 	Backoff   time.Duration // wait between attempts
 	// Logf, if set, gets one line per extra page (timetable, calendar): status, size,
 	// what was parsed. Never credentials, never URLs (they carry the session).
+	// It's called from parallel page fetches, so it must be safe for that
+	// (log.Printf is).
 	Logf func(format string, args ...any)
 
 	proxy *proxySession // nil: direct connection
@@ -86,9 +89,17 @@ func (c *Client) useProxy(p *proxySession) {
 // Proxied reports whether requests go through the residential proxy.
 func (c *Client) Proxied() bool { return c.proxy != nil }
 
+// Extras are the pages fetched after the dashboard, only when asked for: the
+// browser caches them (the timetable for a week, the calendar for days), so most
+// logins need neither.
+type Extras struct{ Timetable, Calendar bool }
+
 // Snapshot is everything one login fetches.
 type Snapshot struct {
 	Dashboard *Dashboard
+	// Asked is which extras were requested; the two fields below are only
+	// meaningful for those.
+	Asked Extras
 	// Timetable is this week's classes, or nil if that page couldn't be fetched
 	// (the dashboard still counts as a success; the timetable is a bonus).
 	Timetable []Day
@@ -105,9 +116,10 @@ func setHeaders(req *http.Request) {
 	req.Header.Set("Connection", "keep-alive")
 }
 
-// Fetch logs in with usn + dob and returns the parsed dashboard plus this week's
-// timetable. Credentials are used for this one exchange and never stored or logged.
-func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time) (*Snapshot, error) {
+// Fetch logs in with usn + dob and returns the parsed dashboard plus whichever
+// extras were asked for. Credentials are used for this one exchange and never
+// stored or logged.
+func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time, want Extras) (*Snapshot, error) {
 	var err error
 	for attempt := 0; attempt <= c.Retries; attempt++ {
 		if attempt > 0 {
@@ -123,7 +135,7 @@ func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time) (*Snapsho
 			actx = withSession(ctx, session) // one exit IP for this whole attempt
 		}
 		var s *Snapshot
-		s, err = c.fetchOnce(actx, usn, dob)
+		s, err = c.fetchOnce(actx, usn, dob, want)
 		switch {
 		case errors.Is(err, ErrForbidden):
 			// Only a new exit IP can change a 403. Retrying may log in again, which
@@ -142,7 +154,7 @@ func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time) (*Snapsho
 	return nil, err
 }
 
-func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time) (*Snapshot, error) {
+func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want Extras) (*Snapshot, error) {
 	jar, _ := cookiejar.New(nil)
 	hc := &http.Client{Jar: jar, Transport: c.Transport, Timeout: c.Timeout}
 
@@ -205,17 +217,28 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time) (*Sna
 		return nil, err
 	}
 
-	// 4. Timetable and calendar, same session, like clicking through from the
-	// dashboard. Best effort: either failing still returns the dashboard.
-	snap := &Snapshot{Dashboard: d}
-	if page, ok := c.extra(ctx, hc, "timetable", TimetablePath, dashURL); ok {
-		snap.Timetable = ParseTimetable(page)
-		c.logf("timetable: %d bytes, %d days", len(page), len(snap.Timetable))
+	// 4. Asked-for extras, same session, like clicking through from the
+	// dashboard; in parallel (the cookie jar is safe for that). Best effort:
+	// either failing still returns the dashboard.
+	snap := &Snapshot{Dashboard: d, Asked: want}
+	var wg sync.WaitGroup
+	if want.Timetable {
+		wg.Go(func() {
+			if page, ok := c.extra(ctx, hc, "timetable", TimetablePath, dashURL); ok {
+				snap.Timetable = ParseTimetable(page)
+				c.logf("timetable: %d bytes, %d days", len(page), len(snap.Timetable))
+			}
+		})
 	}
-	if page, ok := c.extra(ctx, hc, "calendar", CalendarPath, dashURL); ok {
-		snap.Calendar = ParseCalendar(page)
-		c.logf("calendar: %d bytes, parsed %t", len(page), snap.Calendar != nil)
+	if want.Calendar {
+		wg.Go(func() {
+			if page, ok := c.extra(ctx, hc, "calendar", CalendarPath, dashURL); ok {
+				snap.Calendar = ParseCalendar(page)
+				c.logf("calendar: %d bytes, parsed %t", len(page), snap.Calendar != nil)
+			}
+		})
 	}
+	wg.Wait()
 	return snap, nil
 }
 

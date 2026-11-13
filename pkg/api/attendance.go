@@ -21,13 +21,15 @@ import (
 
 // Fetcher is what the handler needs from the portal (a real *portal.Client, or a fixture in dev).
 type Fetcher interface {
-	Fetch(ctx context.Context, usn string, dob time.Time) (*portal.Snapshot, error)
+	Fetch(ctx context.Context, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, error)
 }
 
 // Request is the JSON body: dob is DDMMYYYY, matching how students type it.
+// Extras names the pages wanted besides the dashboard: "timetable", "calendar".
 type Request struct {
-	USN string `json:"usn"`
-	DOB string `json:"dob"`
+	USN    string   `json:"usn"`
+	DOB    string   `json:"dob"`
+	Extras []string `json:"extras"`
 }
 
 // Student is who's logged in. Dept is the two-letter branch code inside the USN (CI, CS, VL…).
@@ -60,11 +62,12 @@ type Course struct {
 type Response struct {
 	Student Student  `json:"student"`
 	Courses []Course `json:"courses"`
-	// Timetable is this week's classes; null when the portal's timetable page
-	// couldn't be fetched, [] for a week with no classes.
-	Timetable []portal.Day `json:"timetable"`
-	// Calendar is the semester's calendar of events; null when it couldn't be fetched.
-	Calendar *portal.Calendar `json:"calendar"`
+	// Timetable is this week's classes: left out when not asked for, null when
+	// the portal's timetable page couldn't be fetched, [] for a week with no classes.
+	Timetable json.RawMessage `json:"timetable,omitempty"`
+	// Calendar is the semester's calendar of events: left out when not asked
+	// for, null when it couldn't be fetched.
+	Calendar json.RawMessage `json:"calendar,omitempty"`
 }
 
 // Error codes the UI maps to messages.
@@ -102,7 +105,7 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			writeErr(w, http.StatusBadRequest, CodeBadInput)
 			return
 		}
-		usn, dob, ok := validate(req, time.Now())
+		usn, dob, want, ok := validate(req, time.Now())
 		if !ok {
 			writeErr(w, http.StatusBadRequest, CodeBadInput)
 			return
@@ -121,7 +124,7 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 		// Finish before Vercel's 60s cap kills us: a cut-off function sends its own
 		// 504 page and never releases the reserved try.
 		ctx, cancel := context.WithTimeout(r.Context(), fetchBudget)
-		snap, err := f.Fetch(ctx, usn, dob)
+		snap, err := f.Fetch(ctx, usn, dob, want)
 		cancel()
 		if errors.Is(err, portal.ErrBadLogin) {
 			// a wrong birthday: the reserved attempt stays counted
@@ -154,17 +157,28 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 	}
 }
 
-// validate normalises the USN and parses the DDMMYYYY birthday.
-func validate(req Request, now time.Time) (string, time.Time, bool) {
+// validate normalises the USN, parses the DDMMYYYY birthday and reads the extras.
+func validate(req Request, now time.Time) (string, time.Time, portal.Extras, bool) {
+	var want portal.Extras
 	usn := strings.ToUpper(strings.TrimSpace(req.USN))
 	if !reUSN.MatchString(usn) {
-		return "", time.Time{}, false
+		return "", time.Time{}, want, false
 	}
 	dob, err := time.Parse("02012006", strings.TrimSpace(req.DOB))
 	if err != nil || dob.Year() < 1970 || dob.After(now) {
-		return "", time.Time{}, false
+		return "", time.Time{}, want, false
 	}
-	return usn, dob, true
+	for _, e := range req.Extras {
+		switch e {
+		case "timetable":
+			want.Timetable = true
+		case "calendar":
+			want.Calendar = true
+		default:
+			return "", time.Time{}, want, false
+		}
+	}
+	return usn, dob, want, true
 }
 
 // Build turns a fetched snapshot into the API response, doing the bunk math.
@@ -182,8 +196,12 @@ func Build(snap *portal.Snapshot, usn string) Response {
 		Student: Student{
 			USN: usn, Name: d.Name, Dept: dept, Sem: d.Sem, Section: d.Section, LastUpdated: d.LastUpdated,
 		},
-		Timetable: snap.Timetable,
-		Calendar:  snap.Calendar,
+	}
+	if snap.Asked.Timetable {
+		out.Timetable = mustJSON(snap.Timetable) // a nil slice is null: couldn't fetch it
+	}
+	if snap.Asked.Calendar {
+		out.Calendar = mustJSON(snap.Calendar)
 	}
 	for _, c := range d.Courses {
 		cie := c.CIE
@@ -212,4 +230,13 @@ func writeErr(w http.ResponseWriter, status int, code string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	json.NewEncoder(w).Encode(map[string]string{"error": code})
+}
+
+// mustJSON encodes parsed portal data, which is plain structs and can't fail.
+func mustJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

@@ -1,3 +1,4 @@
+import type { Extra } from "./cache";
 import type { ApiErrorCode, Attendance } from "./types";
 
 export class ApiError extends Error {
@@ -18,13 +19,14 @@ export const errorCopy: Record<ApiErrorCode, string> = {
   portal_blocked: "Oops, they're blocking us, please wait until we fix ts"
 };
 
-export async function fetchAttendance(usn: string, dob: string): Promise<Attendance> {
+/** Logs in and returns the dashboard, plus the extras asked for (left out of the reply otherwise). */
+export async function fetchAttendance(usn: string, dob: string, extras: Extra[] = []): Promise<Attendance> {
   let res: Response;
   try {
     res = await fetch("/api/attendance", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ usn, dob }),
+      body: JSON.stringify(extras.length ? { usn, dob, extras } : { usn, dob }),
     });
   } catch {
     throw new ApiError("network");

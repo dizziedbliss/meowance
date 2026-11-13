@@ -1,4 +1,4 @@
-import type { Attendance } from "./types";
+import { revive, type Stored } from "./cache";
 
 // Everything lives in this browser only. Clearing it (logout) is the kill switch.
 //
@@ -63,18 +63,18 @@ export async function loadCreds(): Promise<Creds | null> {
   }
 }
 
-export function saveData(a: Attendance): void {
+export function saveData(s: Stored): void {
   try {
-    localStorage.setItem(DATA, JSON.stringify({ at: Date.now(), a }));
+    localStorage.setItem(DATA, JSON.stringify(s));
   } catch {
     /* ignore */
   }
 }
 
-export function loadData(): Attendance | null {
+export function loadData(): Stored | null {
   try {
     const raw = localStorage.getItem(DATA);
-    return raw ? (JSON.parse(raw) as { a: Attendance }).a : null;
+    return raw ? revive(JSON.parse(raw)) : null;
   } catch {
     return null;
   }

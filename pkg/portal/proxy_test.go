@@ -90,7 +90,7 @@ func proxiedClient(t *testing.T, portal string) (*Client, *fakeProxy) {
 func TestFetchForbiddenRotatesProxySession(t *testing.T) {
 	srv, posts := fakePortal(t, loginFixture(t))
 	c, fp := proxiedClient(t, srv.URL)
-	snap, err := c.Fetch(context.Background(), testUSN, testDOB)
+	snap, err := c.Fetch(context.Background(), testUSN, testDOB, all)
 	if err != nil {
 		t.Fatalf("Fetch: %v (want success on the rotated session)", err)
 	}
@@ -109,7 +109,7 @@ func TestFetchForbiddenGivesUpAfterRetries(t *testing.T) {
 	srv, posts := fakePortal(t, loginFixture(t))
 	c, fp := proxiedClient(t, srv.URL)
 	fp.blockAll = true
-	_, err := c.Fetch(context.Background(), testUSN, testDOB)
+	_, err := c.Fetch(context.Background(), testUSN, testDOB, all)
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("err = %v, want ErrForbidden", err)
 	}
@@ -128,7 +128,7 @@ func TestFetchForbiddenWithoutProxyFailsFast(t *testing.T) {
 		w.WriteHeader(http.StatusForbidden)
 	}))
 	defer srv.Close()
-	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, all)
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("err = %v, want ErrForbidden", err)
 	}

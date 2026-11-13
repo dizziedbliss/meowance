@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { BottomNav, type Tab } from "./components/BottomNav";
 import { Dashboard } from "./components/Dashboard";
 import { Events } from "./components/Events";
@@ -7,15 +7,20 @@ import { Logo } from "./components/Logo";
 import { Scores } from "./components/Scores";
 import { Timetable } from "./components/Timetable";
 import { ApiError, errorCopy, fetchAttendance } from "./lib/api";
+import { type Extra, merge, needs, type Stored } from "./lib/cache";
 import { dayMonth } from "./lib/dates";
-import type { Attendance } from "./lib/types";
 import { loadCreds, loadData, saveData, wipe } from "./lib/vault";
 
 /** The portal prints names in caps: "STUDENT" → "Student". */
 const titleCase = (s: string) => s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
+/** The page a tab needs besides the dashboard. */
+const extraOf = (t: Tab | null): Extra | null => (t === "timetable" ? "timetable" : t === "events" ? "calendar" : null);
+
 export default function App() {
-  const [data, setData] = useState<Attendance | null>(loadData);
+  const [store, setStore] = useState<Stored | null>(loadData);
+  const storeRef = useRef(store); // the latest cache, for merges that finish after a re-render
+  const data = store?.a ?? null;
   const [tab, setTab] = useState<Tab | null>(null); // null = the dashboard
   const [syncing, setSyncing] = useState(false);
   const [syncErr, setSyncErr] = useState<string | null>(null);
@@ -24,15 +29,23 @@ export default function App() {
     document.body.classList.toggle("has-nav", data !== null);
   }, [data]);
 
-  async function sync() {
+  function keep(s: Stored | null) {
+    storeRef.current = s;
+    setStore(s);
+  }
+
+  /** Logs in again and refreshes the dashboard, plus these extras. */
+  async function refresh(extras: Extra[]) {
+    if (syncing) return;
     setSyncing(true);
     setSyncErr(null);
     try {
       const c = await loadCreds();
       if (!c) throw new Error("no creds");
-      const a = await fetchAttendance(c.usn, c.dob);
-      saveData(a);
-      setData(a);
+      const a = await fetchAttendance(c.usn, c.dob, extras);
+      const s = merge(storeRef.current, a, extras, Date.now());
+      saveData(s);
+      keep(s);
     } catch (x) {
       setSyncErr(x instanceof ApiError ? errorCopy[x.code] : "lost your login. log out and back in to sync.");
     } finally {
@@ -40,9 +53,21 @@ export default function App() {
     }
   }
 
+  // Opening a tab fetches its page only when the cached copy is missing or stale.
+  useEffect(() => {
+    const e = extraOf(tab);
+    if (e && needs(storeRef.current, e, Date.now())) void refresh([e]);
+  }, [tab]);
+
+  // Sync always refreshes the dashboard, and the open tab's page with it.
+  const sync = () => {
+    const e = extraOf(tab);
+    void refresh(e ? [e] : []);
+  };
+
   async function logout() {
     await wipe();
-    setData(null);
+    keep(null);
     setTab(null);
     setSyncErr(null);
   }
@@ -50,7 +75,7 @@ export default function App() {
   return (
     <div className="mx-auto max-w-[1160px] px-5 pt-5 pb-[150px]" style={{ paddingLeft: "max(20px, env(safe-area-inset-left))", paddingRight: "max(20px, env(safe-area-inset-right))" }}>
       {!data ? (
-        <Login onIn={(a) => setData(a)} />
+        <Login onIn={keep} />
       ) : (
         <>
           <header className="mb-[30px] flex flex-wrap items-center justify-between gap-4">
@@ -81,11 +106,11 @@ export default function App() {
           </header>
 
           {tab === "timetable" ? (
-            <Timetable data={data} />
+            <Timetable data={data} loading={syncing} />
           ) : tab === "scores" ? (
             <Scores data={data} />
           ) : tab === "events" ? (
-            <Events data={data} />
+            <Events data={data} loading={syncing} />
           ) : (
             <Dashboard data={data} />
           )}

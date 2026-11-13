@@ -25,8 +25,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 
 - **`pkg/portal`**: `client.go` logs into Contineo (GET login page → scrape Joomla CSRF token →
   POST `username` + `passwd`=DOB `YYYY-MM-DD` → follow 303s) with a fresh cookie jar per call, one
-  retry on network failure only; then fetches this week's timetable and the calendar of events in
-  the same session, with the dashboard as Referer (best effort: nil on failure). `Client.Logf` logs
+  retry on network failure only; then, only if asked (`Extras`), this week's timetable and the
+  calendar of events, in parallel in the same session, with the dashboard as Referer (best effort:
+  nil on failure). `Client.Logf` logs
   one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
   dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
   is never parsed); `calendar.go` the semester dates, holidays, exam days and events. `proxy.go`: with
@@ -37,9 +38,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   exactly once per attempt (a test counts it).
 - **`pkg/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
   target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.
-- **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY}` → `{student, courses, timetable}`
-  with `need75`, `need85`, `skip85` and `cie`/`cieTotal`/`cieMax` per course; `timetable` is null
-  when it couldn't be fetched. Validates MCE USNs (`4MC…`) and real dates. Error codes:
+- **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY, extras?: ["timetable","calendar"]}`
+  → `{student, courses, timetable?, calendar?}` with `need75`, `need85`, `skip85` and
+  `cie`/`cieTotal`/`cieMax` per course. An extra not asked for is left out; asked but failed is
+  `null`. The dashboard always comes back (the login lands on it). Validates MCE USNs (`4MC…`) and real dates. Error codes:
   `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed`/`portal_blocked` (portal 403s our
   IP) 502. `Cache-Control: no-store`.
 - **`api/attendance.go`**: the Vercel Go function; just wraps `pkg/api` with the real client.
@@ -47,7 +49,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
   zone (bunkable / show up / don't you dare); `lib/scores.ts` the CIE verdicts; `lib/events.ts`
-  working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats. `lib/vault.ts` keeps creds encrypted with a non-extractable
+  working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats; `lib/cache.ts` which extras are stale (the
+  timetable after the week changes, the calendar after 7 days, either after a failed fetch) and
+  merges replies into the cache. Login and sync fetch the dashboard only; opening a tab fetches its
+  page when stale; sync on a tab refreshes that page too. `lib/vault.ts` keeps creds encrypted with a non-extractable
   WebCrypto key (IndexedDB) and the last dashboard in localStorage; logout wipes both.
 
 ## Conventions

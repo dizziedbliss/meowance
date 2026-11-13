@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -100,7 +101,7 @@ var timetableDown atomic.Bool
 
 func TestFetchSuccess(t *testing.T) {
 	srv, _ := fakePortal(t, loginFixture(t))
-	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, all)
 	if err != nil {
 		t.Fatalf("Fetch: %v", err)
 	}
@@ -118,10 +119,15 @@ func TestFetchSuccess(t *testing.T) {
 
 func TestFetchLogsNeverLeakSession(t *testing.T) {
 	srv, _ := fakePortal(t, loginFixture(t))
+	var mu sync.Mutex
 	var lines []string
 	c := newTestClient(srv.URL)
-	c.Logf = func(f string, a ...any) { lines = append(lines, fmt.Sprintf(f, a...)) }
-	if _, err := c.Fetch(context.Background(), testUSN, testDOB); err != nil {
+	c.Logf = func(f string, a ...any) { // called from parallel page fetches
+		mu.Lock()
+		defer mu.Unlock()
+		lines = append(lines, fmt.Sprintf(f, a...))
+	}
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB, all); err != nil {
 		t.Fatal(err)
 	}
 	if len(lines) != 2 {
@@ -138,7 +144,7 @@ func TestFetchTimetableIsBestEffort(t *testing.T) {
 	srv, _ := fakePortal(t, loginFixture(t))
 	timetableDown.Store(true)
 	defer timetableDown.Store(false)
-	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, all)
 	if err != nil {
 		t.Fatalf("a broken timetable page must not fail the login: %v", err)
 	}
@@ -149,7 +155,7 @@ func TestFetchTimetableIsBestEffort(t *testing.T) {
 
 func TestFetchBadLogin(t *testing.T) {
 	srv, posts := fakePortal(t, loginFixture(t))
-	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1))
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1), all)
 	if !errors.Is(err, ErrBadLogin) {
 		t.Fatalf("err = %v, want ErrBadLogin", err)
 	}
@@ -160,7 +166,7 @@ func TestFetchBadLogin(t *testing.T) {
 
 func TestFetchNoToken(t *testing.T) {
 	srv, _ := fakePortal(t, "<html><form id=\"login-form\"></form></html>")
-	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, all)
 	if !errors.Is(err, ErrPortalChanged) {
 		t.Fatalf("err = %v, want ErrPortalChanged", err)
 	}
@@ -173,7 +179,7 @@ func TestFetchPortalDownRetries(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer srv.Close()
-	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB)
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, all)
 	if !errors.Is(err, ErrPortalDown) {
 		t.Fatalf("err = %v, want ErrPortalDown", err)
 	}
@@ -185,18 +191,18 @@ func TestFetchPortalDownRetries(t *testing.T) {
 func TestFetchSessionsDoNotLeak(t *testing.T) {
 	srv, _ := fakePortal(t, loginFixture(t))
 	c := newTestClient(srv.URL)
-	if _, err := c.Fetch(context.Background(), testUSN, testDOB); err != nil {
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB, all); err != nil {
 		t.Fatal(err)
 	}
 	// Same client, wrong DOB: must not ride the previous session's cookies.
-	if _, err := c.Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1)); !errors.Is(err, ErrBadLogin) {
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1), all); !errors.Is(err, ErrBadLogin) {
 		t.Fatalf("second fetch err = %v, want ErrBadLogin (session leaked?)", err)
 	}
 }
 
 func TestFetchPostsLoginOnce(t *testing.T) {
 	srv, posts := fakePortal(t, loginFixture(t))
-	if _, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB); err != nil {
+	if _, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, all); err != nil {
 		t.Fatal(err)
 	}
 	if *posts != 1 {
@@ -247,8 +253,59 @@ func TestFetchStopsAtDeadline(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	_, err := c.Fetch(ctx, testUSN, testDOB)
+	_, err := c.Fetch(ctx, testUSN, testDOB, all)
 	if !errors.Is(err, ErrPortalDown) || time.Since(start) > time.Second {
 		t.Fatalf("err = %v after %v, want ErrPortalDown right at the deadline", err, time.Since(start))
+	}
+}
+
+var all = Extras{Timetable: true, Calendar: true}
+
+// pageHits counts GETs per portal task, to see which pages a login fetched.
+func pageHits(t *testing.T, srv *httptest.Server) *sync.Map {
+	t.Helper()
+	hits := &sync.Map{}
+	inner := srv.Config.Handler
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			n, _ := hits.LoadOrStore(r.URL.Query().Get("task"), new(atomic.Int32))
+			n.(*atomic.Int32).Add(1)
+		}
+		inner.ServeHTTP(w, r)
+	})
+	return hits
+}
+
+func hitCount(m *sync.Map, task string) int32 {
+	n, ok := m.Load(task)
+	if !ok {
+		return 0
+	}
+	return n.(*atomic.Int32).Load()
+}
+
+func TestFetchOnlyAskedExtras(t *testing.T) {
+	cases := []struct {
+		want           Extras
+		timetable, cal int32
+	}{
+		{Extras{}, 0, 0},
+		{Extras{Timetable: true}, 1, 0},
+		{Extras{Calendar: true}, 0, 1},
+		{all, 1, 1},
+	}
+	for _, c := range cases {
+		srv, _ := fakePortal(t, loginFixture(t))
+		hits := pageHits(t, srv)
+		s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, c.want)
+		if err != nil {
+			t.Fatalf("%+v: %v", c.want, err)
+		}
+		if got := [2]int32{hitCount(hits, "timetable"), hitCount(hits, "calenderdisplay")}; got != [2]int32{c.timetable, c.cal} {
+			t.Errorf("%+v: fetched timetable/calendar %v times, want %d/%d", c.want, got, c.timetable, c.cal)
+		}
+		if s.Asked != c.want || (s.Timetable != nil) != c.want.Timetable || (s.Calendar != nil) != c.want.Calendar {
+			t.Errorf("%+v: snapshot asked=%+v timetable=%t calendar=%t", c.want, s.Asked, s.Timetable != nil, s.Calendar != nil)
+		}
 	}
 }

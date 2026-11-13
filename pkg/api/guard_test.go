@@ -95,7 +95,7 @@ func TestLimiterCapsDistributedGuessing(t *testing.T) {
 // slowWrong answers "wrong birthday" after a pause, to make requests overlap.
 type slowWrong struct{ calls atomic.Int32 }
 
-func (s *slowWrong) Fetch(ctx context.Context, _ string, _ time.Time) (*portal.Snapshot, error) {
+func (s *slowWrong) Fetch(ctx context.Context, _ string, _ time.Time, _ portal.Extras) (*portal.Snapshot, error) {
 	s.calls.Add(1)
 	time.Sleep(30 * time.Millisecond)
 	return nil, portal.ErrBadLogin

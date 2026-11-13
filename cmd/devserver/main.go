@@ -22,7 +22,7 @@ import (
 
 type fixture struct{ dashboard, timetable, calendar string }
 
-func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time) (*portal.Snapshot, error) {
+func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, error) {
 	select {
 	case <-time.After(600 * time.Millisecond): // feel like a real round trip
 	case <-ctx.Done():
@@ -35,11 +35,11 @@ func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time) (*portal.
 	if err != nil {
 		return nil, err
 	}
-	s := &portal.Snapshot{Dashboard: d}
-	if f.timetable != "" {
+	s := &portal.Snapshot{Dashboard: d, Asked: want}
+	if want.Timetable && f.timetable != "" {
 		s.Timetable = portal.ParseTimetable(f.timetable)
 	}
-	if f.calendar != "" {
+	if want.Calendar && f.calendar != "" {
 		s.Calendar = portal.ParseCalendar(f.calendar)
 	}
 	return s, nil
