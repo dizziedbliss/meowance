@@ -17,14 +17,27 @@ type fakeFetcher struct {
 	d   *portal.Snapshot
 	err error
 	got struct {
-		usn string
-		dob time.Time
+		usn  string
+		dob  time.Time
+		want portal.Extras
 	}
 }
 
-func (f *fakeFetcher) Fetch(_ context.Context, usn string, dob time.Time) (*portal.Snapshot, error) {
-	f.got.usn, f.got.dob = usn, dob
-	return f.d, f.err
+// Fetch behaves like the real client: only the asked-for extras come back.
+func (f *fakeFetcher) Fetch(_ context.Context, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, error) {
+	f.got.usn, f.got.dob, f.got.want = usn, dob, want
+	if f.d == nil {
+		return nil, f.err
+	}
+	s := *f.d
+	s.Asked = want
+	if !want.Timetable {
+		s.Timetable = nil
+	}
+	if !want.Calendar {
+		s.Calendar = nil
+	}
+	return &s, f.err
 }
 
 func fixture(t *testing.T) *portal.Snapshot {
@@ -56,7 +69,7 @@ func post(h http.HandlerFunc, body string) *httptest.ResponseRecorder {
 
 func TestAttendanceOK(t *testing.T) {
 	f := &fakeFetcher{d: fixture(t)}
-	rec := post(Attendance(f), `{"usn":" 4mc00aa000 ","dob":"15082004"}`)
+	rec := post(Attendance(f), `{"usn":" 4mc00aa000 ","dob":"15082004","extras":["timetable","calendar"]}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body)
 	}
@@ -90,11 +103,15 @@ func TestAttendanceOK(t *testing.T) {
 	if cloud := resp.Courses[0]; len(cloud.CIE) != 2 || cloud.CIETotal != 9 || cloud.CIEMax != 50 || !cloud.CIE[0].Absent {
 		t.Errorf("23AI701 CIE = %+v total %v/%v", cloud.CIE, cloud.CIETotal, cloud.CIEMax)
 	}
-	if len(resp.Timetable) != 4 {
-		t.Errorf("timetable days = %d, want 4", len(resp.Timetable))
+	var days []portal.Day
+	var cal *portal.Calendar
+	json.Unmarshal(resp.Timetable, &days)
+	json.Unmarshal(resp.Calendar, &cal)
+	if len(days) != 4 {
+		t.Errorf("timetable days = %d, want 4", len(days))
 	}
-	if resp.Calendar == nil || resp.Calendar.End != "2026-11-20" || len(resp.Calendar.Events) != 25 {
-		t.Errorf("calendar = %+v", resp.Calendar)
+	if cal == nil || cal.End != "2026-11-20" || len(cal.Events) != 25 {
+		t.Errorf("calendar = %+v", cal)
 	}
 	// a course with no CIE yet must serialise as [] (the UI maps over it), not null
 	if !strings.Contains(rec.Body.String(), `"code":"23AI703"`) || strings.Contains(rec.Body.String(), `"cie":null`) {
@@ -105,9 +122,36 @@ func TestAttendanceOK(t *testing.T) {
 func TestAttendanceTimetableUnavailable(t *testing.T) {
 	snap := fixture(t)
 	snap.Timetable = nil
-	rec := post(Attendance(&fakeFetcher{d: snap}), `{"usn":"4MC00AA000","dob":"15082004"}`)
+	rec := post(Attendance(&fakeFetcher{d: snap}), `{"usn":"4MC00AA000","dob":"15082004","extras":["timetable"]}`)
 	if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"timetable":null`) {
 		t.Fatalf("want 200 with timetable:null, got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+// Extras not asked for are left out entirely ("not fetched", so the browser
+// keeps its cached copy), never sent as null ("fetch failed").
+func TestAttendanceOnlyAskedExtras(t *testing.T) {
+	cases := []struct {
+		body                 string
+		want                 portal.Extras
+		hasTimetable, hasCal bool
+	}{
+		{`{"usn":"4MC00AA000","dob":"15082004"}`, portal.Extras{}, false, false},
+		{`{"usn":"4MC00AA000","dob":"15082004","extras":[]}`, portal.Extras{}, false, false},
+		{`{"usn":"4MC00AA000","dob":"15082004","extras":["calendar"]}`, portal.Extras{Calendar: true}, false, true},
+		{`{"usn":"4MC00AA000","dob":"15082004","extras":["timetable","calendar"]}`, portal.Extras{Timetable: true, Calendar: true}, true, true},
+	}
+	for _, c := range cases {
+		f := &fakeFetcher{d: fixture(t)}
+		rec := post(Attendance(f), c.body)
+		body := rec.Body.String()
+		if rec.Code != http.StatusOK || f.got.want != c.want {
+			t.Fatalf("%s: status %d, fetcher asked for %+v", c.body, rec.Code, f.got.want)
+		}
+		if strings.Contains(body, `"timetable":`) != c.hasTimetable || strings.Contains(body, `"calendar":`) != c.hasCal {
+			t.Errorf("%s: response timetable=%t calendar=%t, want %t/%t", c.body,
+				strings.Contains(body, `"timetable":`), strings.Contains(body, `"calendar":`), c.hasTimetable, c.hasCal)
+		}
 	}
 }
 
@@ -123,6 +167,7 @@ func TestAttendanceErrors(t *testing.T) {
 		{"bad date", `{"usn":"4MC00AA001","dob":"31022005"}`, nil, 400, CodeBadInput},
 		{"future date", `{"usn":"4MC00AA001","dob":"01012999"}`, nil, 400, CodeBadInput},
 		{"junk body", `nope`, nil, 400, CodeBadInput},
+		{"unknown extra", `{"usn":"4MC00AA001","dob":"15082004","extras":["fees"]}`, nil, 400, CodeBadInput},
 		{"wrong creds", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrBadLogin, 401, CodeBadLogin},
 		{"portal down", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalDown, 502, CodePortalDown},
 		{"portal changed", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalChanged, 502, CodePortalChanged},
@@ -151,7 +196,7 @@ func TestAttendanceRejectsGET(t *testing.T) {
 // hangingFetcher is a portal that never answers: it waits for the deadline.
 type hangingFetcher struct{}
 
-func (hangingFetcher) Fetch(ctx context.Context, _ string, _ time.Time) (*portal.Snapshot, error) {
+func (hangingFetcher) Fetch(ctx context.Context, _ string, _ time.Time, _ portal.Extras) (*portal.Snapshot, error) {
 	<-ctx.Done()
 	return nil, portal.ErrPortalDown
 }

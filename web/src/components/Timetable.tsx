@@ -5,7 +5,7 @@ import { classTag, courseName, room, todayName, trimTime } from "../lib/week";
 const tone = { dead: "text-dead", fine: "text-fine", safe: "text-safe", mut: "text-mut" } as const;
 
 /** This week, day by day, every class tagged by whether that subject can afford a bunk. */
-export function Timetable({ data }: { data: Attendance }) {
+export function Timetable({ data, loading }: { data: Attendance; loading: boolean }) {
   const days = data.timetable;
   const today = todayName();
   const total = days?.reduce((n, d) => n + d.classes.length, 0) ?? 0;
@@ -30,7 +30,9 @@ export function Timetable({ data }: { data: Attendance }) {
         </div>
       </div>
 
-      {days === null || days === undefined ? (
+      {days === undefined && loading ? (
+        <Empty line="asking the portal for your week…" />
+      ) : days === null || days === undefined ? (
         <Empty line="couldn't grab your timetable this time. the portal's being the portal. hit sync." />
       ) : days.length === 0 ? (
         <Empty line="no classes this week. suspicious. enjoy it." />

@@ -5,7 +5,7 @@ import type { Attendance, CalendarEvent } from "../lib/types";
 const tone = { safe: "text-safe", dead: "text-dead", orange: "text-orange" } as const;
 
 /** The semester's calendar of events: what's next, what's coming, what already happened. */
-export function Events({ data }: { data: Attendance }) {
+export function Events({ data, loading }: { data: Attendance; loading: boolean }) {
   const cal = data.calendar;
   const today = todayISO();
 
@@ -16,7 +16,9 @@ export function Events({ data }: { data: Attendance }) {
           events<span className="text-orange">.</span>
         </h2>
         <p className="mt-8 max-w-[44ch] font-display text-2xl font-bold leading-tight text-ink-2">
-          couldn't grab the calendar this time. the portal's being the portal. hit sync.
+          {cal === undefined && loading
+            ? "asking the portal for the calendar…"
+            : "couldn't grab the calendar this time. the portal's being the portal. hit sync."}
         </p>
       </section>
     );

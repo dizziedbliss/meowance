@@ -2,11 +2,11 @@ import { useState } from "react";
 import { posts } from "../data/board";
 import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "../lib/api";
 import { portalAsleep } from "../lib/dates";
-import type { Attendance } from "../lib/types";
+import { merge, type Stored } from "../lib/cache";
 import { saveCreds, saveData } from "../lib/vault";
 import { Logo } from "./Logo";
 
-export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
+export function Login({ onIn }: { onIn: (s: Stored) => void }) {
   const [usn, setUsn] = useState("");
   const [dob, setDob] = useState("");
   const [busy, setBusy] = useState(false);
@@ -21,8 +21,9 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
     try {
       const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim());
       await saveCreds({ usn: usn.trim().toUpperCase(), dob: dob.trim() });
-      saveData(a);
-      onIn(a);
+      const s = merge(null, a, [], Date.now()); // dashboard only: tabs fetch their pages when opened
+      saveData(s);
+      onIn(s);
     } catch (x) {
       setErr(errorCopy[x instanceof ApiError ? x.code : "internal"]);
     } finally {
