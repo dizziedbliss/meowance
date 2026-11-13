@@ -54,8 +54,8 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
           </p>
           <p>use your own usn. stalking on someone else's is weird without their permission. don't be that guy.</p>
           <p>
-            * predicted bunks count the classes the portal plans for the whole sem. teachers rarely take or enter all of them, so
-            it's mostly right, not a promise. <strong className="text-ink">don't plan your bunks around it.</strong>
+            * predicted bunks count the classes the portal plans for the whole sem. as you might know that teachers wont take or mark all of them, so
+            it's mostly right according to our calculations, but dont rely on us and try to find us if its wrong. <strong className="text-ink">don't bunk just we said to.</strong>
           </p>
         </div>
       </footer>
