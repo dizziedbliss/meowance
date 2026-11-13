@@ -68,3 +68,21 @@ export function verdict(c: Course): Verdict {
 export function byPercent(courses: Course[]): Course[] {
   return [...courses].sort((a, b) => a.percent - b.percent);
 }
+
+/**
+ * The predicted bunks the whole sem still allows, from the portal's planned
+ * total (holidays already left out). An extra under each course, never the
+ * main verdict: a prediction mustn't talk anyone out of classes. Its
+ * disclaimer lives in the dashboard's "facts to know".
+ */
+export function predicted(c: Course, total: number): { n: number; line: string } {
+  const missed = c.conducted - c.attended;
+  const b85 = Math.floor(total * 0.15 + 1e-9) - missed;
+  const b75 = Math.floor(total * 0.25 + 1e-9) - missed;
+  const bunks = (n: number) => `${n} ${n === 1 ? "bunk" : "bunks"}`;
+  if (b85 > 0) return { n: b85, line: `predicted: ${bunks(b85)} left this sem` };
+  if (b85 === 0) return { n: 0, line: "predicted: no bunks left this sem" };
+  if (b75 > 0) return { n: b75, line: `predicted: 85's gone, ${bunks(b75)} left before 75` };
+  if (b75 === 0) return { n: 0, line: "predicted: 85's gone, no bunks left before 75" };
+  return { n: 0, line: "predicted: even 75's out of reach this sem" };
+}

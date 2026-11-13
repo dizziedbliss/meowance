@@ -5,7 +5,10 @@
   "buildCommand": "cd web && npm run build",
   "outputDirectory": "web/dist",
   "git": {
-    "deploymentEnabled": false
+    "deploymentEnabled": {
+      "**": false,
+      "main": true
+    }
   },
   "regions": [
     "bom1"
@@ -13,6 +16,9 @@
   "functions": {
     "api/attendance.go": {
       "maxDuration": 60
+    },
+    "api/feedback/index.go": {
+      "maxDuration": 20
     }
   },
   "headers": [

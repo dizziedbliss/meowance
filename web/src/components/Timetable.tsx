@@ -1,6 +1,11 @@
-import { dayMonth } from "../lib/dates";
+import { useState } from "react";
+import { dayMonth, todayISO } from "../lib/dates";
 import type { Attendance } from "../lib/types";
 import { classTag, courseName, room, todayName, trimTime } from "../lib/week";
+import { SubTabs } from "./SubTabs";
+
+/** dd-mm-yyyy (timetable) → yyyy-mm-dd, to compare with today. */
+const iso = (d: string) => d.split("-").reverse().join("-");
 
 const tone = { dead: "text-dead", fine: "text-fine", safe: "text-safe", mut: "text-mut" } as const;
 
@@ -9,6 +14,11 @@ export function Timetable({ data, loading }: { data: Attendance; loading: boolea
   const days = data.timetable;
   const today = todayName();
   const total = days?.reduce((n, d) => n + d.classes.length, 0) ?? 0;
+  // one day at a time: today, else the next day with classes, else the first
+  const [picked, setPicked] = useState<string | null>(null);
+  const now = todayISO();
+  const start = days?.find((d) => d.weekday === today) ?? days?.find((d) => iso(d.date) >= now) ?? days?.[0];
+  const shown = days?.find((d) => d.date === picked) ?? start;
 
   return (
     <section className="pt-4 md:pt-8">
@@ -41,7 +51,14 @@ export function Timetable({ data, loading }: { data: Attendance; loading: boolea
           {!days.some((d) => d.weekday === today) && (
             <p className="mt-6 font-display text-xl font-bold text-ink-2">no classes today. go outside, it's free.</p>
           )}
-          {days.map((d) => {
+          <SubTabs
+            label="Day"
+            className="mt-5"
+            tabs={days.map((d) => ({ id: d.date, text: `${d.weekday.slice(0, 3).toLowerCase()} ${dayMonth(d.date)}${d.weekday === today ? " · today" : ""}` }))}
+            active={shown!.date}
+            onTab={setPicked}
+          />
+          {[shown!].map((d) => {
             const isToday = d.weekday === today;
             return (
               <div key={d.date} className="grid gap-x-8 border-b border-hair py-6 md:grid-cols-[150px_minmax(0,1fr)]">

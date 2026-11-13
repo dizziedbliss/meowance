@@ -45,6 +45,13 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed`/`portal_blocked` (portal 403s our
   IP) 502. `Cache-Control: no-store`.
 - **`api/attendance.go`**: the Vercel Go function; just wraps `pkg/api` with the real client.
+- **`api/feedback/index.go`** (own folder: two `Handler`s can't share a Go package): `POST
+  /api/feedback {usn, message}` emails Max through Resend (`pkg/api/feedback.go`, plain text, stdlib
+  HTTP). Env: `RESEND_API_KEY`, `FEEDBACK_FROM` (`meowance <feedback@dizziedbliss.lol>`, verified
+  for sending in Max's own Resend account, no Vercel integration: it needs a DNS-owned domain),
+  `FEEDBACK_TO` (Max's inbox; never in the repo). Missing env → 503 `feedback_off`; the devserver
+  logs feedback instead. Limits: 1000 chars, 5/IP/hour, 100/instance/hour; failed sends don't count.
+  The USN is whatever the browser sends (not verified).
 - **`cmd/devserver`**: same handler locally, optional fixture mode.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
@@ -58,22 +65,30 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Conventions
 
 - **MCE rules:** 85%+ safe ("purring"); 75–85 fine zone (pays a fine unless back to 85); under 75 dead
-  zone (teachers cap at 75). Verdicts count **classes**, never days, and never assume how many
-  classes are left in the sem.
+  zone (teachers cap at 75). Verdicts count **classes**, never days. The main verdict is
+  "attend N more" (to 75 / 85), with the orange still-owe boxes. Predicted bunks (15% of the portal's
+  planned total for the sem, minus bunks so far; the total leaves holidays out, checked against the
+  real calendar 2026-11-13) are only a small extra line under each course, with the disclaimer in
+  "facts to know": a prediction mustn't talk anyone out of classes, and teachers rarely take or
+  enter every planned class. Never use the portal's "still to go" as classes really left: it's stale.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
-  screen, bottom nav is a background-less overlay. Copy is lowercase, dry gen-z; cat puns welcome
+  screen, bottom nav is a background-less overlay over the dark fade, labels split by hairlines, active tab underlined in orange (Max rejected a solid bar: "ew"). No endless
+  scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
   (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.
-- Credentials are never stored server-side or logged. Test fixtures are PII-scrubbed (USN
-  `4MC00AA000`, name `STUDENT`, every lecturer name `FACULTY`, all profile photos); never commit real
-  student data or HARs. Scrub by markup position, then grep for real names.
+- Credentials are never stored server-side or logged. Test fixtures are **mock data**: real page layouts, but
+  every personal value invented (USN `4MC00AA000`, `STUDENT`, lecturers `FACULTY`, the generic
+  avatar, and invented counts, class dates, CIE marks, exam dates, grades, section). Scrubbing names
+  isn't enough; never commit real student data or HARs. Verify by parsing old vs new values.
 - Go: stdlib-first. Web: exact-pinned deps, `npm ci`.
 
 ## Not built yet
 
 - Timetable only shows the current week (no previous/next week).
-- Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
-  calendar) — the data is now fetched, the math isn't wired up.
+- The SEE minimum (12 of 30 from the cies, 8 of 20 from the activities; `seeMin` in
+  `lib/scores.ts`) only shows for the 23 batch and older: the juniors' scheme changed and is unknown.
+- The CIE details page (class averages) is still parsed and fetchable server-side, but the UI
+  dropped it (Max: not useful).
 - The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
   through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
   student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs
@@ -85,9 +100,13 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   Firewall rule "attendance api limit": 60 requests/min per IP on `/api/attendance`, deny when
   exceeded (college Wi-Fi puts everyone behind one IP, so keep it generous). Previews are behind
   Vercel Authentication; use `vercel curl <url>` to test them.
-- **Deploys only happen from the CLI**: `git.deploymentEnabled: false`, because Vercel aimed the first
-  branch push of the new project at production. Preview: `vercel deploy`. Production: `vercel deploy
-  --prod`, only with Max's OK. `.vercelignore` keeps `.env*`, `.vercel`, deps, builds and HARs out of uploads.
+- **Every push to `main` deploys production** (Vercel's Git integration, production branch `main`).
+  `git.deploymentEnabled` is `{"**": false, "main": true}`: other branches don't deploy (a branch
+  deploys if any rule matching it is true; unlisted branches would default to true). So merging to
+  `main` is shipping: only with Max's OK. Previews by hand: `vercel deploy`. `.vercelignore` keeps
+  `.env*`, `.vercel`, deps, builds and HARs out of CLI uploads.
+- **CI** (`.github/workflows/ci.yml`) on pushes to `main` and every PR: gofmt, `go vet`, `go test
+  -race`, and in `web/` `npm ci`, typecheck, tests, build. It reports; it doesn't block deploys.
 - Shared Go code lives in `pkg/`, not `internal/`: Vercel compiles `/api` as its own package
   (`handler/api`), and Go forbids it importing another module's `internal/`.
 - `vercel.json`: functions run in `bom1` (Mumbai, near the portal), 60s max; security headers on every

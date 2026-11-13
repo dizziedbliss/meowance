@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +40,14 @@ func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	extraPages := map[string][]byte{}
+	for task, file := range map[string]string{"attendencelist": "attendancelist.html", "ciedetails": "ciedetails.html", "getSemResult": "examhistory.html"} {
+		b, err := os.ReadFile(filepath.Join("testdata", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		extraPages[task] = b
+	}
 	var posts int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := r.Cookie("sess")
@@ -54,6 +63,8 @@ func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
 					w.Write(tt)
 				case "calenderdisplay":
 					w.Write(cal)
+				case "attendencelist", "ciedetails", "getSemResult":
+					w.Write(extraPages[r.URL.Query().Get("task")])
 				default:
 					w.Write(dash)
 				}
@@ -106,7 +117,7 @@ func TestFetchSuccess(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	d := s.Dashboard
-	if len(d.Courses) != 5 || d.Courses[0].Code != "23AI701" || d.Courses[0].Attended != 20 {
+	if len(d.Courses) != 5 || d.Courses[0].Code != "23AI701" || d.Courses[0].Attended != 18 {
 		t.Fatalf("unexpected dashboard: %+v", d.Courses)
 	}
 	if len(s.Timetable) != 4 || s.Timetable[0].Weekday != "Monday" {
@@ -304,8 +315,51 @@ func TestFetchOnlyAskedExtras(t *testing.T) {
 		if got := [2]int32{hitCount(hits, "timetable"), hitCount(hits, "calenderdisplay")}; got != [2]int32{c.timetable, c.cal} {
 			t.Errorf("%+v: fetched timetable/calendar %v times, want %d/%d", c.want, got, c.timetable, c.cal)
 		}
-		if s.Asked != c.want || (s.Timetable != nil) != c.want.Timetable || (s.Calendar != nil) != c.want.Calendar {
+		if !reflect.DeepEqual(s.Asked, c.want) || (s.Timetable != nil) != c.want.Timetable || (s.Calendar != nil) != c.want.Calendar {
 			t.Errorf("%+v: snapshot asked=%+v timetable=%t calendar=%t", c.want, s.Asked, s.Timetable != nil, s.Calendar != nil)
 		}
+	}
+}
+
+func TestFetchHistoryPages(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	hits := pageHits(t, srv)
+	want := Extras{History: []string{"23AI701", "NOT-A-COURSE"}, CIE: []string{"23AI701"}, Exams: true}
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := [3]int32{hitCount(hits, "attendencelist"), hitCount(hits, "ciedetails"), hitCount(hits, "getSemResult")}; got != [3]int32{1, 1, 1} {
+		t.Errorf("fetched attendance list/cie/exams %v times, want 1 each (unknown codes skipped)", got)
+	}
+	if h := s.History["23AI701"]; h == nil || len(h.Classes) != 24 {
+		t.Errorf("history = %+v", s.History)
+	}
+	if _, asked := s.History["NOT-A-COURSE"]; asked {
+		t.Error("a code not on the dashboard should be left out, not fetched")
+	}
+	if d := s.CIE["23AI701"]; d == nil || len(d.Stats) != 3 {
+		t.Errorf("cie = %+v", s.CIE)
+	}
+	if s.Exams == nil || len(s.Exams.Sems) != 6 {
+		t.Errorf("exams = %+v", s.Exams)
+	}
+	if s.Timetable != nil || s.Calendar != nil {
+		t.Error("timetable/calendar fetched without being asked")
+	}
+}
+
+func TestFetchAllHistory(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	hits := pageHits(t, srv)
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, Extras{AllHistory: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(s.Dashboard.Courses); hitCount(hits, "attendencelist") != int32(n) || len(s.History) != n {
+		t.Errorf("fetched %d attendance lists, history has %d entries; want one per course (%d)", hitCount(hits, "attendencelist"), len(s.History), n)
+	}
+	if len(s.Asked.History) != len(s.Dashboard.Courses) || s.Asked.AllHistory {
+		t.Errorf("Asked = %+v; want the expanded course list", s.Asked)
 	}
 }

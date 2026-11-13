@@ -39,8 +39,49 @@ export type Course = {
 export type CalendarEvent = { from: string; to: string; title: string; kind: "holiday" | "exam" | "lastday" | "" }; // YYYY-MM-DD
 export type Calendar = { start: string; end: string; holidays: string[]; examDays: string[]; events: CalendarEvent[] };
 
-/** timetable / calendar: null = couldn't fetch it this time; undefined = cached before they existed. */
-export type Attendance = { student: Student; courses: Course[]; timetable?: Day[] | null; calendar?: Calendar | null };
+/** One class of one course. */
+export type ClassRecord = { date: string; start: string; end: string; present: boolean }; // date YYYY-MM-DD
+/** A course's class-by-class attendance; stillToGo is the portal's count of classes still planned. */
+export type CourseHistory = {
+  code: string;
+  name: string;
+  faculty: string; // the lecturer's name; their photo is never fetched
+  present: number;
+  absent: number;
+  stillToGo: number;
+  classes: ClassRecord[]; // oldest first
+};
+export type CIEStat = { name: string; obtained: number; classAvg: number; max: number };
+export type CIEDetails = { code: string; stats: CIEStat[] };
+export type ExamCourse = {
+  code: string;
+  name: string;
+  cie: number;
+  see: number;
+  total: number;
+  date: string; // "Feb-2024", "" when the portal has none
+  credits: number;
+  earned: number;
+  audit: boolean; // NSS / yoga / PE: no credits
+  gpa: number;
+  grade: string;
+};
+export type SemResult = { sem: number; credits: number; sgpa: number; cgpa: number; courses: ExamCourse[] }; // credits: cumulative
+export type ExamHistory = { creditsEarned: number; creditsToEarn: number; cgpa: number; sems: SemResult[] };
+
+/**
+ * Extras: null = couldn't fetch it; undefined = not fetched (yet). The per-course
+ * maps are keyed by course code, each value null when that course's page failed.
+ */
+export type Attendance = {
+  student: Student;
+  courses: Course[];
+  timetable?: Day[] | null;
+  calendar?: Calendar | null;
+  history?: Record<string, CourseHistory | null>;
+  cieDetails?: Record<string, CIEDetails | null>;
+  exams?: ExamHistory | null;
+};
 
 export type ApiErrorCode =
   | "bad_input"

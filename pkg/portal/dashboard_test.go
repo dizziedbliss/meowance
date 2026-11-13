@@ -29,8 +29,8 @@ func TestParseHeader(t *testing.T) {
 	if d.Name != "STUDENT" {
 		t.Errorf("Name = %q, want STUDENT (scrubbed)", d.Name)
 	}
-	if d.Branch != "B.E-CA" {
-		t.Errorf("Branch = %q, want B.E-CA", d.Branch)
+	if d.Branch != "B.E-AA" {
+		t.Errorf("Branch = %q, want B.E-AA", d.Branch)
 	}
 	if d.Sem != "07" {
 		t.Errorf("Sem = %q, want 07", d.Sem)
@@ -46,11 +46,11 @@ func TestParseHeader(t *testing.T) {
 func TestParseCourses(t *testing.T) {
 	d := loadFixture(t)
 	want := []Course{
-		{Code: "23AI701", Name: "Cloud Computing", LTPS: "2-0-2-0", Credits: 3, Type: "Theory", Nature: "Professional Studies Core", CourseID: "5669", SecID: "610", SemID: "226", Attended: 20, Conducted: 25},
-		{Code: "23AI702", Name: "Prompt Engineering & AI Automation", LTPS: "2-0-2-0", Credits: 3, Type: "Theory", Nature: "Professional Studies Core", CourseID: "5670", SecID: "610", SemID: "226", Attended: 22, Conducted: 27},
-		{Code: "23AI703", Name: "Full Stack Technologies", LTPS: "3-0-2-0", Credits: 4, Type: "Theory", Nature: "Professional Studies Core", CourseID: "5671", SecID: "610", SemID: "226", Attended: 25, Conducted: 30},
-		{Code: "23AI704D", Name: "AI for Predictive Analytics and IoT", LTPS: "3-0-0-0", Credits: 3, Type: "Theory", Nature: "Professional Studies Electives", CourseID: "5672", SecID: "610", SemID: "226", Attended: 10, Conducted: 14},
-		{Code: "23OEEC71", Name: "Sensors and Actuators", LTPS: "3-0-0-0", Credits: 3, Type: "Theory", Nature: "Other Electives", CourseID: "5616", SecID: "115", SemID: "38", Attended: 5, Conducted: 5},
+		{Code: "23AI701", Name: "Cloud Computing", LTPS: "2-0-2-0", Credits: 3, Type: "Theory", Nature: "Professional Studies Core", CourseID: "5669", SecID: "610", SemID: "226", Attended: 18, Conducted: 24},
+		{Code: "23AI702", Name: "Prompt Engineering & AI Automation", LTPS: "2-0-2-0", Credits: 3, Type: "Theory", Nature: "Professional Studies Core", CourseID: "5670", SecID: "610", SemID: "226", Attended: 23, Conducted: 26},
+		{Code: "23AI703", Name: "Full Stack Technologies", LTPS: "3-0-2-0", Credits: 4, Type: "Theory", Nature: "Professional Studies Core", CourseID: "5671", SecID: "610", SemID: "226", Attended: 24, Conducted: 29},
+		{Code: "23AI704D", Name: "AI for Predictive Analytics and IoT", LTPS: "3-0-0-0", Credits: 3, Type: "Theory", Nature: "Professional Studies Electives", CourseID: "5672", SecID: "610", SemID: "226", Attended: 9, Conducted: 13},
+		{Code: "23OEEC71", Name: "Sensors and Actuators", LTPS: "3-0-0-0", Credits: 3, Type: "Theory", Nature: "Other Electives", CourseID: "5616", SecID: "115", SemID: "38", Attended: 6, Conducted: 6},
 	}
 	if len(d.Courses) != len(want) {
 		t.Fatalf("got %d courses, want %d", len(d.Courses), len(want))
@@ -71,11 +71,11 @@ func TestParseCIE(t *testing.T) {
 	d := loadFixture(t)
 	cloud := d.Courses[0]
 	want := []CIEPart{
-		{Name: "SE1", Max: 10, Absent: true, Entered: "10th Sep 26"},
-		{Name: "SE2", Max: 10, Obtained: 9, Entered: "13th Oct 26"},
+		{Name: "SE1", Max: 10, Obtained: 6, Entered: "10th Sep 26"},
+		{Name: "SE2", Max: 10, Obtained: 7, Entered: "13th Oct 26"},
 	}
-	if !reflect.DeepEqual(cloud.CIE, want) || cloud.CIETotal != 9 {
-		t.Fatalf("23AI701 CIE = %+v total %v, want %+v total 9", cloud.CIE, cloud.CIETotal, want)
+	if !reflect.DeepEqual(cloud.CIE, want) || cloud.CIETotal != 13 {
+		t.Fatalf("23AI701 CIE = %+v total %v, want %+v total 13", cloud.CIE, cloud.CIETotal, want)
 	}
 	if full := d.Courses[2]; len(full.CIE) != 0 {
 		t.Errorf("23AI703 should have no CIE parts yet, got %+v", full.CIE)

@@ -1,13 +1,29 @@
-import type { Attendance } from "../lib/types";
+import { semTotal, squares } from "../lib/history";
+import type { Attendance, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
+import { FeedbackBox } from "./FeedbackBox";
+import { HistoryPanel } from "./HistoryPanel";
 import { Slab } from "./Slab";
 
-export function Dashboard({ data }: { data: Attendance }) {
+type Props = { data: Attendance; open: string | null; onOpen: (code: string | null) => void; loading: boolean };
+
+/** One course open at a time, so the page never grows into a scroll marathon. */
+export function Dashboard({ data, open, onOpen, loading }: Props) {
   const [worst, ...rest] = byPercent(data.courses);
+  const toggle = (code: string) => () => onOpen(open === code ? null : code);
+  const dated = (c: Course) => squares(c.attended, c.conducted, data.history?.[c.code]?.classes);
+  const total = (c: Course) => semTotal(data.history?.[c.code]);
+  const panel = (code: string) =>
+    open === code && (
+      <div className={`border-b border-hair ${code === worst?.code ? "pt-4" : ""}`}>
+        <HistoryPanel history={data.history?.[code]} loading={loading} />
+      </div>
+    );
   return (
     <>
-      {worst && <Slab course={worst} />}
+      {worst && <Slab course={worst} classes={dated(worst)} total={total(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
+      {worst && panel(worst.code)}
 
       {rest.length > 0 && (
         <>
@@ -20,7 +36,10 @@ export function Dashboard({ data }: { data: Attendance }) {
             </div>
           </div>
           {rest.map((c) => (
-            <CourseRow key={c.code} course={c} />
+            <div key={c.code}>
+              <CourseRow course={c} classes={dated(c)} total={total(c)} open={open === c.code} onToggle={toggle(c.code)} />
+              {panel(c.code)}
+            </div>
           ))}
         </>
       )}
@@ -34,8 +53,13 @@ export function Dashboard({ data }: { data: Attendance }) {
             the bill. <strong className="text-ink">we don't.</strong>
           </p>
           <p>use your own usn. stalking on someone else's is weird without their permission. don't be that guy.</p>
+          <p>
+            * predicted bunks count the classes the portal plans for the whole sem. teachers rarely take or enter all of them, so
+            it's mostly right, not a promise. <strong className="text-ink">don't plan your bunks around it.</strong>
+          </p>
         </div>
       </footer>
+      <FeedbackBox usn={data.student.usn} />
     </>
   );
 }

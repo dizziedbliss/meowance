@@ -20,7 +20,9 @@ import (
 	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
-type fixture struct{ dashboard, timetable, calendar string }
+// fixture serves saved pages. The attendance list and CIE page are one course's;
+// they're served for every course code asked for.
+type fixture struct{ dashboard, timetable, calendar, attendanceList, cieDetails, examHistory string }
 
 func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, error) {
 	select {
@@ -35,12 +37,41 @@ func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want port
 	if err != nil {
 		return nil, err
 	}
+	if want.AllHistory { // like the real client: every course on the dashboard
+		want.AllHistory = false
+		for _, c := range d.Courses {
+			want.History = append(want.History, c.Code)
+		}
+	}
 	s := &portal.Snapshot{Dashboard: d, Asked: want}
 	if want.Timetable && f.timetable != "" {
 		s.Timetable = portal.ParseTimetable(f.timetable)
 	}
 	if want.Calendar && f.calendar != "" {
 		s.Calendar = portal.ParseCalendar(f.calendar)
+	}
+	if want.Exams {
+		s.Exams, _ = portal.ParseExamHistory(f.examHistory)
+	}
+	for _, code := range want.History {
+		if s.History == nil {
+			s.History = map[string]*portal.CourseHistory{}
+		}
+		h, _ := portal.ParseAttendanceList(f.attendanceList)
+		if h != nil {
+			h.Code = code
+		}
+		s.History[code] = h
+	}
+	for _, code := range want.CIE {
+		if s.CIE == nil {
+			s.CIE = map[string]*portal.CIEDetails{}
+		}
+		x, _ := portal.ParseCIEDetails(f.cieDetails)
+		if x != nil {
+			x.Code = code
+		}
+		s.CIE[code] = x
 	}
 	return s, nil
 }
@@ -65,12 +96,30 @@ func main() {
 		dir := filepath.Dir(*fx)
 		tt, _ := os.ReadFile(filepath.Join(dir, "timetable.html"))
 		cal, _ := os.ReadFile(filepath.Join(dir, "calendar.html"))
-		f = fixture{dashboard: string(b), timetable: string(tt), calendar: string(cal)}
+		al, _ := os.ReadFile(filepath.Join(dir, "attendancelist.html"))
+		cie, _ := os.ReadFile(filepath.Join(dir, "ciedetails.html"))
+		ex, _ := os.ReadFile(filepath.Join(dir, "examhistory.html"))
+		f = fixture{dashboard: string(b), timetable: string(tt), calendar: string(cal),
+			attendanceList: string(al), cieDetails: string(cie), examHistory: string(ex)}
 		log.Printf("fixture mode: %s (timetable: %t, calendar: %t)", *fx, len(tt) > 0, len(cal) > 0)
 	}
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/attendance", api.Attendance(f))
+	// feedback: sent for real with RESEND_API_KEY/FEEDBACK_FROM/FEEDBACK_TO set, logged otherwise
+	var mail api.Mailer = logMailer{}
+	if m := api.ResendFromEnv(); m != nil {
+		mail = m
+	}
+	mux.Handle("/api/feedback", api.Feedback(mail))
 	log.Printf("listening on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))
+}
+
+// logMailer prints feedback instead of emailing it (local runs without Resend).
+type logMailer struct{}
+
+func (logMailer) Send(_ context.Context, usn, message string) error {
+	log.Printf("feedback (not sent, no RESEND_API_KEY) from %s: %q", usn, message)
+	return nil
 }

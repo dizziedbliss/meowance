@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { posts } from "../data/board";
 import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "../lib/api";
 import { portalAsleep } from "../lib/dates";
@@ -6,11 +6,21 @@ import { merge, type Stored } from "../lib/cache";
 import { saveCreds, saveData } from "../lib/vault";
 import { Logo } from "./Logo";
 
+/** What the button says while the portal takes its sweet time (one line every 1.6s, the last one stays). */
+const waiting = ["logging into contineo…", "sniffing out your bunks…", "pawing through your classes…", "counting classes, not days…", "almost purring…"];
+
 export function Login({ onIn }: { onIn: (s: Stored) => void }) {
   const [usn, setUsn] = useState("");
   const [dob, setDob] = useState("");
   const [busy, setBusy] = useState(false);
+  const [line, setLine] = useState(0);
+  useEffect(() => {
+    if (!busy) return setLine(0);
+    const id = setInterval(() => setLine((i) => Math.min(i + 1, waiting.length - 1)), 1600);
+    return () => clearInterval(id);
+  }, [busy]);
   const [err, setErr] = useState<string | null>(null);
+  const [older, setOlder] = useState(false); // phones: the two newest posts, the rest on request
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -19,9 +29,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
     setErr(null);
     setBusy(true);
     try {
-      const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim());
+      // every course's class-by-class page comes along with the login, so the dated
+      // boxes are there at once (no second login right after); other tabs fetch when opened
+      const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim(), ["history:all"]);
       await saveCreds({ usn: usn.trim().toUpperCase(), dob: dob.trim() });
-      const s = merge(null, a, [], Date.now()); // dashboard only: tabs fetch their pages when opened
+      const got = Object.keys(a.history ?? {}).map((code) => `history:${code}` as const);
+      const s = merge(null, a, got, Date.now());
       saveData(s);
       onIn(s);
     } catch (x) {
@@ -102,10 +115,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
             <button
               type="submit"
               disabled={busy}
-              className="group flex w-full items-center justify-between gap-3 bg-orange px-5 py-[17px] font-display text-xl font-extrabold tracking-[-.01em] text-[#140b00] transition-colors hover:bg-orange-hi disabled:cursor-wait disabled:opacity-80"
+              aria-busy={busy}
+              className={`group relative flex w-full items-center justify-between gap-3 overflow-hidden bg-orange px-5 py-[17px] font-display text-xl font-extrabold tracking-[-.01em] text-[#140b00] transition-colors hover:bg-orange-hi disabled:cursor-wait ${busy ? "busy" : ""}`}
             >
-              <span>{busy ? "pulling your receipts…" : "show me the damage"}</span>
-              <span className="font-mono font-medium transition-transform group-hover:translate-x-1.5">→</span>
+              <span aria-live="polite">{busy ? waiting[line] : "show me the damage"}</span>
+              <span className={`font-mono font-medium transition-transform ${busy ? "nudge" : "group-hover:translate-x-1.5"}`}>→</span>
+              {busy && <i aria-hidden className="sweep" />}
             </button>
             <p role="alert" className="mt-3 min-h-5 text-sm text-dead">{err}</p>
           </form>
@@ -122,8 +137,10 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
             Changelogs
           </h2>
           <div className="mt-2.5 mb-7 font-mono text-xs text-mut">What happened??</div>
+          {/* desktop: its own scroll box, so the login page stays one screen tall */}
+          <div className="thin-scroll md:max-h-[min(560px,calc(100dvh-260px))] md:overflow-y-auto md:pr-4">
           {posts.map((p, i) => (
-            <article key={p.title} className={`post ${i === 0 ? "new" : ""}`}>
+            <article key={p.title} className={`post ${i === 0 ? "new" : ""} ${i >= 2 && !older ? "max-md:hidden" : ""}`}>
               <div className="flex gap-2.5 font-mono text-[11px] text-mut">
                 <span>{p.when}</span>
                 {i === 0 && <b className="font-medium text-orange">new</b>}
@@ -133,6 +150,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
               <div className="mt-1 font-sign text-[21px] leading-none text-orange">{p.sign}</div>
             </article>
           ))}
+          </div>
+          {posts.length > 2 && (
+            <button type="button" onClick={() => setOlder(!older)} className="font-mono text-xs text-ink-2 hover:text-ink md:hidden">
+              {older ? "fewer posts ↑" : `older posts (${posts.length - 2}) ↓`}
+            </button>
+          )}
         </aside>
       </div>
     </main>

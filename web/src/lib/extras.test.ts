@@ -16,7 +16,7 @@ describe("scoreVerdict", () => {
     const v = scoreVerdict(course({ cie: [part("SE1", 10, 0, true), part("SE2", 10, 9)], cieTotal: 9, cieMax: 50 }));
     expect([v.got, v.lost, v.left]).toEqual([9, 11, 30]);
     expect(v.zone).toBe("dead"); // 9 of 20 = 45%
-    expect(v.sub).toContain("ghosted se1");
+    expect(v.sub).toContain("ghosted cie1");
   });
   it("all tests ghosted", () => {
     const v = scoreVerdict(course({ cie: [part("SE1", 10, 0, true)], cieTotal: 0, cieMax: 50 }));

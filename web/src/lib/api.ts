@@ -47,3 +47,27 @@ export function dobOk(s: string): boolean {
   const date = new Date(Date.UTC(y, mo - 1, d));
   return y >= 1970 && date.getUTCMonth() === mo - 1 && date.getUTCDate() === d && date.getTime() < Date.now();
 }
+
+/** What to tell them when feedback doesn't go through. */
+const feedbackCopy: Record<string, string> = {
+  too_many_tries: "that's a lot of feedback. try again in an hour.",
+  feedback_off: "the feedback box is napping. try again later.",
+  bad_input: "that message is empty or over 1000 characters.",
+};
+
+/** Sends the "tell max" box to Max's inbox, with the student's usn. Throws an Error with the copy to show. */
+export async function sendFeedback(usn: string, message: string): Promise<void> {
+  let res: Response;
+  try {
+    res = await fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ usn, message }),
+    });
+  } catch {
+    throw new Error("you're offline, or we are. try again.");
+  }
+  if (res.ok) return;
+  const body = (await res.json().catch(() => ({}))) as { error?: string };
+  throw new Error((body.error && feedbackCopy[body.error]) || "couldn't send it. try again in a bit.");
+}

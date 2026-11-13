@@ -3,9 +3,11 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -36,6 +38,29 @@ func (f *fakeFetcher) Fetch(_ context.Context, usn string, dob time.Time, want p
 	}
 	if !want.Calendar {
 		s.Calendar = nil
+	}
+	if !want.Exams {
+		s.Exams = nil
+	}
+	s.History, s.CIE = nil, nil
+	if want.AllHistory { // like the real client: every dashboard course
+		want.History, want.AllHistory = nil, false
+		for _, c := range f.d.Dashboard.Courses {
+			want.History = append(want.History, c.Code)
+		}
+	}
+	s.Asked = want
+	for _, code := range want.History {
+		if s.History == nil {
+			s.History = map[string]*portal.CourseHistory{}
+		}
+		s.History[code] = f.d.History[code]
+	}
+	for _, code := range want.CIE {
+		if s.CIE == nil {
+			s.CIE = map[string]*portal.CIEDetails{}
+		}
+		s.CIE[code] = f.d.CIE[code]
 	}
 	return &s, f.err
 }
@@ -87,9 +112,9 @@ func TestAttendanceOK(t *testing.T) {
 		t.Errorf("student = %+v", resp.Student)
 	}
 	want := map[string]Course{
-		"23AI701":  {Percent: 80, Need75: 0, Need85: 9, Skip85: 0},
-		"23AI704D": {Percent: 71.4, Need75: 2, Need85: 13, Skip85: 0},
-		"23OEEC71": {Percent: 100, Need75: 0, Need85: 0, Skip85: 0},
+		"23AI701":  {Percent: 75, Need75: 0, Need85: 16, Skip85: 0},
+		"23AI704D": {Percent: 69.2, Need75: 3, Need85: 14, Skip85: 0},
+		"23OEEC71": {Percent: 100, Need75: 0, Need85: 0, Skip85: 1},
 	}
 	for _, c := range resp.Courses {
 		w, ok := want[c.Code]
@@ -100,7 +125,7 @@ func TestAttendanceOK(t *testing.T) {
 			t.Errorf("%s = %+v, want %+v", c.Code, c, w)
 		}
 	}
-	if cloud := resp.Courses[0]; len(cloud.CIE) != 2 || cloud.CIETotal != 9 || cloud.CIEMax != 50 || !cloud.CIE[0].Absent {
+	if cloud := resp.Courses[0]; len(cloud.CIE) != 2 || cloud.CIETotal != 13 || cloud.CIEMax != 50 || cloud.CIE[0].Obtained != 6 {
 		t.Errorf("23AI701 CIE = %+v total %v/%v", cloud.CIE, cloud.CIETotal, cloud.CIEMax)
 	}
 	var days []portal.Day
@@ -145,7 +170,7 @@ func TestAttendanceOnlyAskedExtras(t *testing.T) {
 		f := &fakeFetcher{d: fixture(t)}
 		rec := post(Attendance(f), c.body)
 		body := rec.Body.String()
-		if rec.Code != http.StatusOK || f.got.want != c.want {
+		if rec.Code != http.StatusOK || !reflect.DeepEqual(f.got.want, c.want) {
 			t.Fatalf("%s: status %d, fetcher asked for %+v", c.body, rec.Code, f.got.want)
 		}
 		if strings.Contains(body, `"timetable":`) != c.hasTimetable || strings.Contains(body, `"calendar":`) != c.hasCal {
@@ -168,6 +193,8 @@ func TestAttendanceErrors(t *testing.T) {
 		{"future date", `{"usn":"4MC00AA001","dob":"01012999"}`, nil, 400, CodeBadInput},
 		{"junk body", `nope`, nil, 400, CodeBadInput},
 		{"unknown extra", `{"usn":"4MC00AA001","dob":"15082004","extras":["fees"]}`, nil, 400, CodeBadInput},
+		{"bad course code", `{"usn":"4MC00AA001","dob":"15082004","extras":["history:../../x"]}`, nil, 400, CodeBadInput},
+		{"history without code", `{"usn":"4MC00AA001","dob":"15082004","extras":["history:"]}`, nil, 400, CodeBadInput},
 		{"wrong creds", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrBadLogin, 401, CodeBadLogin},
 		{"portal down", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalDown, 502, CodePortalDown},
 		{"portal changed", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalChanged, 502, CodePortalChanged},
@@ -209,5 +236,75 @@ func TestAttendanceGivesUpWithinBudget(t *testing.T) {
 	rec := post(Attendance(hangingFetcher{}), `{"usn":"4MC00AA001","dob":"15082004"}`)
 	if rec.Code != http.StatusBadGateway || time.Since(start) > time.Second {
 		t.Fatalf("got %d after %v, want a 502 portal_down at the budget", rec.Code, time.Since(start))
+	}
+}
+
+func TestAttendanceHistoryExtras(t *testing.T) {
+	snap := fixture(t)
+	read := func(name string) string {
+		b, err := os.ReadFile("../portal/testdata/" + name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return string(b)
+	}
+	h, _ := portal.ParseAttendanceList(read("attendancelist.html"))
+	cie, _ := portal.ParseCIEDetails(read("ciedetails.html"))
+	snap.Exams, _ = portal.ParseExamHistory(read("examhistory.html"))
+	snap.History = map[string]*portal.CourseHistory{"23AI701": h, "23AI702": nil} // 23AI702's page failed
+	snap.CIE = map[string]*portal.CIEDetails{"23AI701": cie}
+	f := &fakeFetcher{d: snap}
+	rec := post(Attendance(f), `{"usn":"4MC00AA000","dob":"15082004","extras":["history:23AI701","history:23AI702","history:23AI701","cie:23AI701","exams"]}`)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body)
+	}
+	if !reflect.DeepEqual(f.got.want, portal.Extras{History: []string{"23AI701", "23AI702"}, CIE: []string{"23AI701"}, Exams: true}) {
+		t.Errorf("asked the portal for %+v (duplicates should collapse)", f.got.want)
+	}
+	var resp struct {
+		History    map[string]*portal.CourseHistory `json:"history"`
+		CIEDetails map[string]*portal.CIEDetails    `json:"cieDetails"`
+		Exams      *portal.ExamHistory              `json:"exams"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if got := resp.History["23AI701"]; got == nil || got.StillToGo != 21 || len(got.Classes) != 24 {
+		t.Errorf("history 23AI701 = %+v", got)
+	}
+	if v, ok := resp.History["23AI702"]; !ok || v != nil {
+		t.Errorf("a failed page should be null, got %v (present %t)", v, ok)
+	}
+	if resp.CIEDetails["23AI701"] == nil || resp.Exams == nil || len(resp.Exams.Sems) != 6 {
+		t.Errorf("cie = %+v, exams = %+v", resp.CIEDetails, resp.Exams)
+	}
+	if strings.Contains(rec.Body.String(), `"timetable"`) {
+		t.Error("timetable sent without being asked")
+	}
+}
+
+func TestAttendanceCapsCourseExtras(t *testing.T) {
+	var extras []string
+	for i := range maxCourses + 1 {
+		extras = append(extras, fmt.Sprintf(`"history:23AI%03d"`, i))
+	}
+	body := `{"usn":"4MC00AA000","dob":"15082004","extras":[` + strings.Join(extras, ",") + `]}`
+	if rec := post(Attendance(&fakeFetcher{d: fixture(t)}), body); rec.Code != http.StatusBadRequest {
+		t.Fatalf("%d course extras: status %d, want 400", maxCourses+1, rec.Code)
+	}
+}
+
+func TestAttendanceHistoryAll(t *testing.T) {
+	f := &fakeFetcher{d: fixture(t)}
+	rec := post(Attendance(f), `{"usn":"4MC00AA000","dob":"15082004","extras":["history:all"]}`)
+	if rec.Code != http.StatusOK || !f.got.want.AllHistory {
+		t.Fatalf("status %d, asked %+v", rec.Code, f.got.want)
+	}
+	var resp struct {
+		History map[string]any `json:"history"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if len(resp.History) != len(f.d.Dashboard.Courses) {
+		t.Errorf("history has %d courses, want all %d", len(resp.History), len(f.d.Dashboard.Courses))
 	}
 }

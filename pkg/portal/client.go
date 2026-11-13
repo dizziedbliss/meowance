@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -92,7 +93,23 @@ func (c *Client) Proxied() bool { return c.proxy != nil }
 // Extras are the pages fetched after the dashboard, only when asked for: the
 // browser caches them (the timetable for a week, the calendar for days), so most
 // logins need neither.
-type Extras struct{ Timetable, Calendar bool }
+type Extras struct {
+	Timetable, Calendar, Exams bool
+	History                    []string // course codes whose class-by-class attendance is wanted
+	CIE                        []string // course codes whose CIE page (class averages) is wanted
+	// AllHistory wants every course on the dashboard: a fresh login doesn't know
+	// the codes yet, and asking at login saves a second login right after.
+	AllHistory bool
+}
+
+// Any reports whether any extra page is wanted.
+func (e Extras) Any() bool {
+	return e.Timetable || e.Calendar || e.Exams || e.AllHistory || len(e.History) > 0 || len(e.CIE) > 0
+}
+
+// maxParallel caps the extra pages fetched at once, so a fresh browser asking
+// for everything doesn't hit the portal (and the proxy) with a burst.
+const maxParallel = 6
 
 // Snapshot is everything one login fetches.
 type Snapshot struct {
@@ -105,6 +122,12 @@ type Snapshot struct {
 	Timetable []Day
 	// Calendar is the semester's calendar of events, or nil if it couldn't be fetched.
 	Calendar *Calendar
+	// History and CIE are keyed by course code: a nil value means that page
+	// couldn't be fetched; a code not on the dashboard is left out.
+	History map[string]*CourseHistory
+	CIE     map[string]*CIEDetails
+	// Exams is every past semester's results, or nil if it couldn't be fetched.
+	Exams *ExamHistory
 }
 
 // setHeaders makes a request look like the browser the User-Agent claims to be.
@@ -219,27 +242,109 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 
 	// 4. Asked-for extras, same session, like clicking through from the
 	// dashboard; in parallel (the cookie jar is safe for that). Best effort:
-	// either failing still returns the dashboard.
+	// any of them failing still returns the dashboard.
+	if want.AllHistory {
+		want.AllHistory = false
+		for _, co := range d.Courses {
+			if !slices.Contains(want.History, co.Code) {
+				want.History = append(want.History, co.Code)
+			}
+		}
+	}
 	snap := &Snapshot{Dashboard: d, Asked: want}
-	var wg sync.WaitGroup
-	if want.Timetable {
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex // guards the snapshot's maps
+		slot = make(chan struct{}, maxParallel)
+	)
+	fetchPage := func(name, path string, use func(string)) {
 		wg.Go(func() {
-			if page, ok := c.extra(ctx, hc, "timetable", TimetablePath, dashURL); ok {
-				snap.Timetable = ParseTimetable(page)
-				c.logf("timetable: %d bytes, %d days", len(page), len(snap.Timetable))
+			slot <- struct{}{}
+			defer func() { <-slot }()
+			if p, ok := c.extra(ctx, hc, name, path, dashURL); ok {
+				use(p)
 			}
 		})
 	}
+	if want.Timetable {
+		fetchPage("timetable", TimetablePath, func(p string) {
+			snap.Timetable = ParseTimetable(p)
+			c.logf("timetable: %d bytes, %d days", len(p), len(snap.Timetable))
+		})
+	}
 	if want.Calendar {
-		wg.Go(func() {
-			if page, ok := c.extra(ctx, hc, "calendar", CalendarPath, dashURL); ok {
-				snap.Calendar = ParseCalendar(page)
-				c.logf("calendar: %d bytes, parsed %t", len(page), snap.Calendar != nil)
+		fetchPage("calendar", CalendarPath, func(p string) {
+			snap.Calendar = ParseCalendar(p)
+			c.logf("calendar: %d bytes, parsed %t", len(p), snap.Calendar != nil)
+		})
+	}
+	if want.Exams {
+		fetchPage("exam history", fmt.Sprintf(examHistoryPath, url.QueryEscape(usnOf(d, usn))), func(p string) {
+			x, err := ParseExamHistory(p)
+			if err == nil {
+				snap.Exams = x
 			}
+			c.logf("exam history: %d bytes, parsed %t", len(p), err == nil)
+		})
+	}
+	courses := map[string]Course{}
+	for _, co := range d.Courses {
+		courses[co.Code] = co
+	}
+	// Every asked course gets its nil ("couldn't fetch") entry before any
+	// per-course fetch starts, so the goroutines only overwrite entries, under mu.
+	var history, cie []Course
+	if len(want.History) > 0 {
+		snap.History = map[string]*CourseHistory{}
+	}
+	for _, code := range want.History {
+		if co, ok := courses[code]; ok {
+			snap.History[code] = nil
+			history = append(history, co)
+		}
+	}
+	if len(want.CIE) > 0 {
+		snap.CIE = map[string]*CIEDetails{}
+	}
+	for _, code := range want.CIE {
+		if co, ok := courses[code]; ok {
+			snap.CIE[code] = nil
+			cie = append(cie, co)
+		}
+	}
+	for _, co := range history {
+		fetchPage("attendance list", fmt.Sprintf(attendanceListPath, co.CourseID, co.SecID, co.SemID), func(p string) {
+			h, err := ParseAttendanceList(p)
+			mu.Lock()
+			if err == nil {
+				snap.History[co.Code] = h
+			}
+			mu.Unlock()
+			c.logf("attendance list: %d bytes, parsed %t", len(p), err == nil)
+		})
+	}
+	for _, co := range cie {
+		code := co.Code
+		fetchPage("cie details", fmt.Sprintf(cieDetailsPath, co.CourseID, co.SemID), func(p string) {
+			x, err := ParseCIEDetails(p)
+			mu.Lock()
+			if err == nil {
+				snap.CIE[code] = x
+			}
+			mu.Unlock()
+			c.logf("cie details: %d bytes, parsed %t", len(p), err == nil)
 		})
 	}
 	wg.Wait()
 	return snap, nil
+}
+
+// usnOf is the USN for the exam-history link: the dashboard's, else the login's.
+func usnOf(d *Dashboard, login string) string {
+	if d.USN != "" {
+		return d.USN
+	}
+	return login
 }
 
 // extra fetches one more page of the logged-in session and logs what came back.
@@ -264,6 +369,12 @@ func pageKind(html string) string {
 		return "timetable"
 	case strings.Contains(html, "events-lists") || strings.Contains(html, "Start Date"):
 		return "calendar"
+	case strings.Contains(html, "cn-attend-list1"):
+		return "attendance list"
+	case strings.Contains(html, "res-table"):
+		return "exam history"
+	case strings.Contains(html, "cn-cie-grid"):
+		return "cie details"
 	case strings.Contains(html, "attendencelist"):
 		return "dashboard"
 	}

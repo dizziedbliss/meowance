@@ -4,18 +4,27 @@ import { Dashboard } from "./components/Dashboard";
 import { Events } from "./components/Events";
 import { Login } from "./components/Login";
 import { Logo } from "./components/Logo";
-import { Scores } from "./components/Scores";
+import { Scores, type ScoresView } from "./components/Scores";
 import { Timetable } from "./components/Timetable";
 import { ApiError, errorCopy, fetchAttendance } from "./lib/api";
-import { type Extra, merge, needs, type Stored } from "./lib/cache";
+import { type Extra, merge, stale, type Stored } from "./lib/cache";
 import { dayMonth } from "./lib/dates";
+import type { Attendance } from "./lib/types";
 import { loadCreds, loadData, saveData, wipe } from "./lib/vault";
 
 /** The portal prints names in caps: "STUDENT" → "Student". */
 const titleCase = (s: string) => s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
 /** The page a tab needs besides the dashboard. */
-const extraOf = (t: Tab | null): Extra | null => (t === "timetable" ? "timetable" : t === "events" ? "calendar" : null);
+/** The pages the screen on view needs besides the dashboard. */
+function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView): Extra[] {
+  if (!data) return [];
+  const each = (kind: "history") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
+  if (tab === "timetable") return ["timetable"];
+  if (tab === "events") return ["calendar"];
+  if (tab === "scores") return scores === "past" ? ["exams"] : [];
+  return each("history"); // dated tally boxes; cached until a course's counts change
+}
 
 export default function App() {
   const [store, setStore] = useState<Stored | null>(loadData);
@@ -24,6 +33,9 @@ export default function App() {
   const [tab, setTab] = useState<Tab | null>(null); // null = the dashboard
   const [syncing, setSyncing] = useState(false);
   const [syncErr, setSyncErr] = useState<string | null>(null);
+  const [scoresView, setScoresView] = useState<ScoresView>("now");
+  const [open, setOpen] = useState<string | null>(null); // the dashboard course showing its receipts
+  const tried = useRef(new Set<Extra>()); // auto-fetched on this view already: a failing page isn't retried in a loop
 
   useEffect(() => {
     document.body.classList.toggle("has-nav", data !== null);
@@ -53,22 +65,35 @@ export default function App() {
     }
   }
 
-  // Opening a tab fetches its page only when the cached copy is missing or stale.
+  const view = extrasFor(data, tab, scoresView);
+  const viewKey = `${tab}|${scoresView}`;
   useEffect(() => {
-    const e = extraOf(tab);
-    if (e && needs(storeRef.current, e, Date.now())) void refresh([e]);
-  }, [tab]);
+    tried.current = new Set();
+  }, [viewKey]);
 
-  // Sync always refreshes the dashboard, and the open tab's page with it.
+  // A screen fetches its pages only when the cached copies are missing or stale,
+  // including when a sync just changed what they reflect (new counts, new marks).
+  useEffect(() => {
+    if (syncing) return;
+    const list = stale(storeRef.current, view, Date.now()).filter((e) => !tried.current.has(e));
+    if (list.length === 0) return;
+    list.forEach((e) => tried.current.add(e));
+    void refresh(list);
+    // view is derived from these three
+  }, [viewKey, store?.at, syncing]);
+
+  // Sync refreshes the dashboard and everything the screen on view shows.
   const sync = () => {
-    const e = extraOf(tab);
-    void refresh(e ? [e] : []);
+    view.forEach((e) => tried.current.add(e));
+    void refresh(view);
   };
 
   async function logout() {
     await wipe();
     keep(null);
     setTab(null);
+    setOpen(null);
+    setScoresView("now");
     setSyncErr(null);
   }
 
@@ -108,11 +133,11 @@ export default function App() {
           {tab === "timetable" ? (
             <Timetable data={data} loading={syncing} />
           ) : tab === "scores" ? (
-            <Scores data={data} />
+            <Scores data={data} view={scoresView} onView={setScoresView} loading={syncing} />
           ) : tab === "events" ? (
             <Events data={data} loading={syncing} />
           ) : (
-            <Dashboard data={data} />
+            <Dashboard data={data} open={open} onOpen={setOpen} loading={syncing} />
           )}
           <BottomNav active={tab} onTab={setTab} onLogout={logout} />
         </>

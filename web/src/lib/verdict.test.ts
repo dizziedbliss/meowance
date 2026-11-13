@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { byPercent, verdict, zoneOf } from "./verdict";
+import { byPercent, predicted, verdict, zoneOf } from "./verdict";
 import type { Course } from "./types";
 
 // Numbers as the Go API returns them for the scrubbed fixture.
@@ -50,5 +50,24 @@ describe("verdict", () => {
 describe("byPercent", () => {
   it("puts the worst subject first", () => {
     expect(byPercent([cloud, sensors, ai]).map((x) => x.code)).toEqual(["23AI704D", "23AI701", "23OEEC71"]);
+  });
+});
+
+describe("predicted (the small extra line; the main verdict stays 'attend N')", () => {
+  const c = (attended: number, conducted: number) =>
+    ({ code: "X", name: "X", credits: 3, attended, conducted, percent: (attended / conducted) * 100, need75: 0, need85: 0, skip85: 0 });
+  // 45 classes: 85% lets you miss 6, 75% lets you miss 11
+  it("counts the bunks the whole sem still allows for 85", () => {
+    expect(predicted(c(20, 25), 45)).toEqual({ n: 1, line: "predicted: 1 bunk left this sem" });
+    expect(predicted(c(10, 14), 45)).toEqual({ n: 2, line: "predicted: 2 bunks left this sem" });
+  });
+  it("says none when the 85 budget is used up", () => {
+    expect(predicted(c(19, 25), 45)).toEqual({ n: 0, line: "predicted: no bunks left this sem" });
+  });
+  it("falls back to 75 once 85 is gone", () => {
+    expect(predicted(c(16, 25), 45)).toEqual({ n: 2, line: "predicted: 85's gone, 2 bunks left before 75" });
+  });
+  it("says so when even 75 is out of reach", () => {
+    expect(predicted(c(10, 25), 45)).toEqual({ n: 0, line: "predicted: even 75's out of reach this sem" });
   });
 });
