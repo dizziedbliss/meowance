@@ -24,10 +24,10 @@ in it is invented. It is nobody's real record.
 ## What it shows
 
 - **Dashboard:** every course's attendance, worst first. Each class is a box in real order:
-  filled = pawsent, hollow = bunked, green = predicted bunks left. The verdict comes from the
-  sem's total classes ("predicted bunks left: 1"), so it stays sane even when the portal is weeks
-  behind on entering classes. It's a prediction: teachers rarely take or enter every planned
-  class, so it's mostly right, not a promise.
+  filled = pawsent, hollow = bunked, orange = classes still to attend to reach 75 or 85
+  ("attend 3 more classes"). Under each course, a small extra line predicts the bunks the whole
+  sem still allows, from the portal's planned classes. It's only a prediction: teachers rarely take
+  or enter every planned class, so it never replaces the "attend" verdict.
 - **Timetable:** this week, one day at a time, each class tagged by whether that subject can afford a bunk.
 - **Scores:** this sem's CIE marks and the minimum to sit the SEE; past sems' grades, SGPA and CGPA.
 - **Events:** the semester calendar: what's next, working days left.

@@ -1,24 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { semOf, squares } from "./history";
+import { semTotal, squares } from "./history";
 import { partLabel, seeMin } from "./scores";
 import type { ClassRecord } from "./types";
 
 const cls = (date: string, present = true, start = "11:00"): ClassRecord => ({ date, start, end: "12:00", present });
 
-describe("semOf", () => {
-  const course = (attended: number, conducted: number) =>
-    ({ code: "X", name: "X", credits: 3, attended, conducted, percent: (attended / conducted) * 100, need75: 0, need85: 0, skip85: 0 });
+describe("semTotal", () => {
   const hist = (present: number, absent: number, stillToGo: number) =>
     ({ code: "X", name: "X", faculty: "", present, absent, stillToGo, classes: [] });
-  it("takes the sem total from the portal's plan and turns the bunks left into lives", () => {
-    expect(semOf(course(20, 25), hist(20, 5, 20))).toEqual({ total: 45, budget: { n: 1, label: "life" } });
-  });
-  it("counts toward 75 once 85 is gone, and nothing past that", () => {
-    expect(semOf(course(16, 25), hist(16, 9, 20))?.budget).toEqual({ n: 2, label: "before 75" });
-    expect(semOf(course(10, 25), hist(10, 15, 20))?.budget).toEqual({ n: 0, label: "" });
-  });
-  it("needs the history", () => {
-    expect(semOf(course(20, 25), undefined)).toBeNull();
+  it("is the portal's plan for the sem: present + absent + still to go", () => {
+    expect(semTotal(hist(20, 5, 20))).toBe(45);
+    expect(semTotal(hist(0, 0, 0))).toBeNull();
+    expect(semTotal(undefined)).toBeNull();
   });
 });
 

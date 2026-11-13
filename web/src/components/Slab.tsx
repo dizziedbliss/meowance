@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ClassRecord, Course } from "../lib/types";
-import type { Sem } from "../lib/history";
-import { fmtPct, semVerdict, verdict, zoneName } from "../lib/verdict";
+import { fmtPct, predicted, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
 import { toggleProps } from "./CourseRow";
 import { Tally } from "./Tally";
@@ -28,10 +27,11 @@ function useCountUp(target: number): number {
 }
 
 /** Your worst subject, as a slab in its zone's color. */
-type SlabProps = { course: Course; classes: ClassRecord[] | null; sem: Sem | null; open: boolean; onToggle: () => void };
+type SlabProps = { course: Course; classes: ClassRecord[] | null; total: number | null; open: boolean; onToggle: () => void };
 
-export function Slab({ course, classes, sem, open, onToggle }: SlabProps) {
-  const v = sem ? semVerdict(course, sem.total) : verdict(course);
+export function Slab({ course, classes, total, open, onToggle }: SlabProps) {
+  const v = verdict(course);
+  const guess = total ? predicted(course, total) : null; // an extra, never the main verdict
   const shown = useCountUp(course.percent);
 
   return (
@@ -72,7 +72,8 @@ export function Slab({ course, classes, sem, open, onToggle }: SlabProps) {
         )}
       </div>
 
-      <Tally course={course} zone={v.zone} classes={classes} budget={sem?.budget} onSlab pop className="col-span-full mt-5" />
+      <Tally course={course} zone={v.zone} classes={classes} onSlab pop className="col-span-full mt-5" />
+      {guess && <p className="col-span-full -mt-4 font-mono text-[11px] opacity-70 md:mt-2">{guess.line}*</p>}
     </section>
   );
 }

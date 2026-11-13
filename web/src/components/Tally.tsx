@@ -2,14 +2,12 @@ import { isoDayMonth } from "../lib/dates";
 import type { ClassRecord, Course } from "../lib/types";
 import type { Zone } from "../lib/verdict";
 
-/** Bunks the sem still allows: shown as lives instead of "classes in a row" squares. */
-type Budget = { n: number; label: string };
-type Props = { course: Course; zone: Zone; classes?: ClassRecord[] | null; budget?: Budget | null; onSlab?: boolean; pop?: boolean; className?: string };
+type Props = { course: Course; zone: Zone; classes?: ClassRecord[] | null; onSlab?: boolean; pop?: boolean; className?: string };
 
 const tip = (c: ClassRecord) => `${c.present ? "pawsent" : "bunked"} · ${isoDayMonth(c.date)} · ${c.start}`;
 
 /** One square per class: filled = attended, hollow = bunked, orange outline = classes still owed. */
-export function Tally({ course: c, zone, classes, budget, onSlab, pop, className = "" }: Props) {
+export function Tally({ course: c, zone, classes, onSlab, pop, className = "" }: Props) {
   const sq: React.ReactNode[] = [];
   let k = 0;
   if (classes) {
@@ -25,13 +23,7 @@ export function Tally({ course: c, zone, classes, budget, onSlab, pop, className
     sq.push(<b key={`${prefix}l`}>{label}</b>);
   };
 
-  if (budget) {
-    if (budget.n > 0) {
-      sq.push(<span key="g" className="gap" />);
-      for (let i = 0; i < budget.n; i++) sq.push(<i key={`s${i}`} className="sk" />);
-      sq.push(<b key="sl">{budget.label}</b>);
-    }
-  } else if (zone === "dead") {
+  if (zone === "dead") {
     sq.push(<span key="g" className="gap" />);
     owe(c.need75, "75", "n");
     owe(c.need85 - c.need75, "85", "f");
@@ -45,7 +37,7 @@ export function Tally({ course: c, zone, classes, budget, onSlab, pop, className
   }
 
   const label = `${c.attended} attended, ${c.conducted - c.attended} bunked` +
-    (budget ? `, ${Math.max(0, budget.n)} more bunks the sem allows` : zone === "dead" ? `, ${c.need75} more to reach 75, ${c.need85} to reach 85` : zone === "fine" ? `, ${c.need85} more to reach 85` : "");
+    (zone === "dead" ? `, ${c.need75} more to reach 75, ${c.need85} to reach 85` : zone === "fine" ? `, ${c.need85} more to reach 85` : "");
 
   return (
     <div role="img" aria-label={label} className={`tally ${onSlab ? "on-slab" : ""} ${pop ? "pop" : ""} ${className}`}>

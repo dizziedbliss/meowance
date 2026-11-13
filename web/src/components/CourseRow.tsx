@@ -1,6 +1,5 @@
 import type { ClassRecord, Course } from "../lib/types";
-import type { Sem } from "../lib/history";
-import { fmtPct, semVerdict, verdict, zoneName } from "../lib/verdict";
+import { fmtPct, predicted, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
 import { Tally } from "./Tally";
 
@@ -21,10 +20,11 @@ export const toggleProps = (open: boolean, onToggle: () => void, label: string) 
   },
 });
 
-type RowProps = { course: Course; classes: ClassRecord[] | null; sem: Sem | null; open: boolean; onToggle: () => void };
+type RowProps = { course: Course; classes: ClassRecord[] | null; total: number | null; open: boolean; onToggle: () => void };
 
-export function CourseRow({ course, classes, sem, open, onToggle }: RowProps) {
-  const v = sem ? semVerdict(course, sem.total) : verdict(course);
+export function CourseRow({ course, classes, total, open, onToggle }: RowProps) {
+  const v = verdict(course);
+  const guess = total ? predicted(course, total) : null; // an extra, never the main verdict
   return (
     <div
       {...toggleProps(open, onToggle, `${course.name}: ${open ? "hide" : "show"} every class`)}
@@ -48,7 +48,8 @@ export function CourseRow({ course, classes, sem, open, onToggle }: RowProps) {
         </b>
         <span className="mt-1 block text-sm text-ink-2">{v.sub}</span>
       </div>
-      <Tally course={course} zone={v.zone} classes={classes} budget={sem?.budget} className="col-span-full text-ink" />
+      <Tally course={course} zone={v.zone} classes={classes} className="col-span-full text-ink" />
+      {guess && <p className="col-span-full -mt-1.5 font-mono text-[11px] text-mut">{guess.line}*</p>}
     </div>
   );
 }

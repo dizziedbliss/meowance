@@ -1,4 +1,4 @@
-import { semOf, squares } from "../lib/history";
+import { semTotal, squares } from "../lib/history";
 import type { Attendance, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
@@ -12,7 +12,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
   const [worst, ...rest] = byPercent(data.courses);
   const toggle = (code: string) => () => onOpen(open === code ? null : code);
   const dated = (c: Course) => squares(c.attended, c.conducted, data.history?.[c.code]?.classes);
-  const sem = (c: Course) => semOf(c, data.history?.[c.code]);
+  const total = (c: Course) => semTotal(data.history?.[c.code]);
   const panel = (code: string) =>
     open === code && (
       <div className={`border-b border-hair ${code === worst?.code ? "pt-4" : ""}`}>
@@ -21,7 +21,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
     );
   return (
     <>
-      {worst && <Slab course={worst} classes={dated(worst)} sem={sem(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
+      {worst && <Slab course={worst} classes={dated(worst)} total={total(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
       {worst && panel(worst.code)}
 
       {rest.length > 0 && (
@@ -31,16 +31,12 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
             <div aria-label="Tally key" className="flex flex-wrap gap-4 font-mono text-[11px] text-mut">
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 bg-ink" />pawsent</span>
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-mut)]" />bunked</span>
-              {rest.every((c) => sem(c)) ? (
-                <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-safe)]" />predicted lives</span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-orange)]" />still owe</span>
-              )}
+              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-orange)]" />still owe</span>
             </div>
           </div>
           {rest.map((c) => (
             <div key={c.code}>
-              <CourseRow course={c} classes={dated(c)} sem={sem(c)} open={open === c.code} onToggle={toggle(c.code)} />
+              <CourseRow course={c} classes={dated(c)} total={total(c)} open={open === c.code} onToggle={toggle(c.code)} />
               {panel(c.code)}
             </div>
           ))}
@@ -56,6 +52,10 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
             the bill. <strong className="text-ink">we don't.</strong>
           </p>
           <p>use your own usn. stalking on someone else's is weird without their permission. don't be that guy.</p>
+          <p>
+            * predicted bunks count the classes the portal plans for the whole sem. teachers rarely take or enter all of them, so
+            it's mostly right, not a promise. <strong className="text-ink">don't plan your bunks around it.</strong>
+          </p>
         </div>
       </footer>
     </>

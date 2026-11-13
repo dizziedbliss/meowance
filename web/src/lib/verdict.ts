@@ -70,45 +70,19 @@ export function byPercent(courses: Course[]): Course[] {
 }
 
 /**
- * The verdict from the whole sem instead of "classes in a row": the portal's
- * planned total for the course (holidays already left out) sets how many bunks
- * 85 (or 75) allows all sem. Calm early in the sem, and not thrown by the
- * portal being weeks behind on entering classes.
+ * The predicted bunks the whole sem still allows, from the portal's planned
+ * total (holidays already left out). An extra under each course, never the
+ * main verdict: a prediction mustn't talk anyone out of classes. Its
+ * disclaimer lives in the dashboard's "facts to know".
  */
-/** Bunks the whole sem still allows: for 85, or for 75 once 85 is gone (negative: over even 75's). */
-export function semBudget(c: Course, total: number) {
+export function predicted(c: Course, total: number): { n: number; line: string } {
   const missed = c.conducted - c.attended;
-  const allow85 = Math.floor(total * 0.15 + 1e-9);
-  const allow75 = Math.floor(total * 0.25 + 1e-9);
-  return { missed, allow85, allow75, b85: allow85 - missed, b75: allow75 - missed };
-}
-
-export function semVerdict(c: Course, total: number): Verdict {
-  const { missed, allow85, allow75, b85, b75 } = semBudget(c, total);
-  if (b85 > 0) {
-    return {
-      zone: c.percent >= 85 ? "safe" : "fine",
-      head: { before: "predicted bunks left: ", n: b85, after: "" },
-      sub: `${missed} bunked so far, of the ${allow85} that 85 allows across the sem's ${total} classes. mostly right, but teachers rarely take or enter every class, so don't spend them all.`,
-    };
-  }
-  if (b85 === 0) {
-    return {
-      zone: "fine",
-      head: { before: "predicted bunks left: ", n: 0, after: "" },
-      sub: `you've used all ${allow85} that 85 allows this sem. show up to every class from here.`,
-    };
-  }
-  if (b75 >= 0) {
-    return {
-      zone: "fine",
-      head: { before: "85's gone. predicted bunks before 75: ", n: b75, after: "" },
-      sub: `${missed} missed, 85 only allowed ${allow85}. that's the fine. it's a prediction, so hold 75 with room to spare.`,
-    };
-  }
-  return {
-    zone: "dead",
-    head: { before: "cooked for the sem", n: null, after: "" },
-    sub: `${missed} missed, more than the ${allow75} even 75 allows. talk to your faculty.`,
-  };
+  const b85 = Math.floor(total * 0.15 + 1e-9) - missed;
+  const b75 = Math.floor(total * 0.25 + 1e-9) - missed;
+  const bunks = (n: number) => `${n} ${n === 1 ? "bunk" : "bunks"}`;
+  if (b85 > 0) return { n: b85, line: `predicted: ${bunks(b85)} left this sem` };
+  if (b85 === 0) return { n: 0, line: "predicted: no bunks left this sem" };
+  if (b75 > 0) return { n: b75, line: `predicted: 85's gone, ${bunks(b75)} left before 75` };
+  if (b75 === 0) return { n: 0, line: "predicted: 85's gone, no bunks left before 75" };
+  return { n: 0, line: "predicted: even 75's out of reach this sem" };
 }

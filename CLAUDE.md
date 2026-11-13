@@ -58,11 +58,12 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Conventions
 
 - **MCE rules:** 85%+ safe ("purring"); 75–85 fine zone (pays a fine unless back to 85); under 75 dead
-  zone (teachers cap at 75). Verdicts count **classes**, never days. Once a course's history
-  is in, the verdict uses the portal's planned total for the sem (present + absent + still to go,
-  holidays already left out; checked against the real calendar 2026-11-13): "you can bunk N more
-  this sem" = 15% of the total minus bunks so far. Never "attend N to stay": the portal is often
-  weeks behind on entering classes, so its "still to go" count is stale.
+  zone (teachers cap at 75). Verdicts count **classes**, never days. The main verdict is
+  "attend N more" (to 75 / 85), with the orange still-owe boxes. Predicted bunks (15% of the portal's
+  planned total for the sem, minus bunks so far; the total leaves holidays out, checked against the
+  real calendar 2026-11-13) are only a small extra line under each course, with the disclaimer in
+  "facts to know": a prediction mustn't talk anyone out of classes, and teachers rarely take or
+  enter every planned class. Never use the portal's "still to go" as classes really left: it's stale.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
   screen, bottom nav is an overlay with its own solid background (it mustn't blend in). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
