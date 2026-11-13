@@ -279,34 +279,40 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 	for _, co := range d.Courses {
 		courses[co.Code] = co
 	}
+	// Every asked course gets its nil ("couldn't fetch") entry before any
+	// per-course fetch starts, so the goroutines only overwrite entries, under mu.
+	var history, cie []Course
 	if len(want.History) > 0 {
 		snap.History = map[string]*CourseHistory{}
 	}
 	for _, code := range want.History {
-		co, ok := courses[code]
-		if !ok {
-			continue
+		if co, ok := courses[code]; ok {
+			snap.History[code] = nil
+			history = append(history, co)
 		}
-		snap.History[code] = nil // asked: stays nil if the page fails
-		fetchPage("attendance list", fmt.Sprintf(attendanceListPath, co.CourseID, co.SecID, co.SemID), func(p string) {
-			h, err := ParseAttendanceList(p)
-			mu.Lock()
-			if err == nil {
-				snap.History[code] = h
-			}
-			mu.Unlock()
-			c.logf("attendance list: %d bytes, parsed %t", len(p), err == nil)
-		})
 	}
 	if len(want.CIE) > 0 {
 		snap.CIE = map[string]*CIEDetails{}
 	}
 	for _, code := range want.CIE {
-		co, ok := courses[code]
-		if !ok {
-			continue
+		if co, ok := courses[code]; ok {
+			snap.CIE[code] = nil
+			cie = append(cie, co)
 		}
-		snap.CIE[code] = nil
+	}
+	for _, co := range history {
+		fetchPage("attendance list", fmt.Sprintf(attendanceListPath, co.CourseID, co.SecID, co.SemID), func(p string) {
+			h, err := ParseAttendanceList(p)
+			mu.Lock()
+			if err == nil {
+				snap.History[co.Code] = h
+			}
+			mu.Unlock()
+			c.logf("attendance list: %d bytes, parsed %t", len(p), err == nil)
+		})
+	}
+	for _, co := range cie {
+		code := co.Code
 		fetchPage("cie details", fmt.Sprintf(cieDetailsPath, co.CourseID, co.SemID), func(p string) {
 			x, err := ParseCIEDetails(p)
 			mu.Lock()

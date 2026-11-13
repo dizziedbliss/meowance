@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { merge, needs, revive, type Stored } from "./cache";
+import { merge, needs, revive, stale, type Stored } from "./cache";
 import type { Attendance, Calendar, Day } from "./types";
 
 const day = (date: string): Day => ({ weekday: "Monday", date, classes: [] });
@@ -67,5 +67,52 @@ describe("revive", () => {
   it("rejects junk", () => {
     expect(revive(null)).toBeNull();
     expect(revive({ at: 1 })).toBeNull();
+  });
+});
+
+// --- per-course pages and exam history ---
+const course = (code: string, attended: number, conducted: number, cieTotal = 9) =>
+  ({ code, name: code, credits: 3, attended, conducted, percent: 0, need75: 0, need85: 0, skip85: 0, cie: [], cieTotal, cieMax: 50 });
+const hist = (code: string) => ({ code, name: code, faculty: "FACULTY", present: 20, absent: 5, stillToGo: 20, classes: [] });
+const exams = { creditsEarned: 124, creditsToEarn: 36, cgpa: 7.9, sems: [] };
+
+describe("per-course and exam pages", () => {
+  const base = att({ courses: [course("23AI701", 20, 25), course("23AI702", 10, 12)] });
+
+  it("fetches a course's history once, and again only when its counts change", () => {
+    let s = merge(null, base, [], FRI);
+    expect(needs(s, "history:23AI701", FRI)).toBe(true);
+    s = merge(s, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
+    expect(needs(s, "history:23AI701", FRI + 60 * 86_400_000)).toBe(false); // old, but nothing changed
+    expect(needs(s, "history:23AI702", FRI)).toBe(true); // a different course
+    const counted = merge(s, att({ courses: [course("23AI701", 21, 26), course("23AI702", 10, 12)] }), [], FRI);
+    expect(counted.a.history?.["23AI701"]).toBeTruthy(); // still shown…
+    expect(needs(counted, "history:23AI701", FRI)).toBe(true); // …but refetched: a class was taken
+  });
+  it("refetches a course's cie averages when its marks change", () => {
+    let s = merge(null, base, [], FRI);
+    s = merge(s, { ...base, cieDetails: { "23AI701": { code: "23AI701", stats: [] } } }, ["cie:23AI701"], FRI);
+    expect(needs(s, "cie:23AI701", FRI)).toBe(false);
+    const marked = merge(s, att({ courses: [course("23AI701", 20, 25, 18), course("23AI702", 10, 12)] }), [], FRI);
+    expect(needs(marked, "cie:23AI701", FRI)).toBe(true);
+  });
+  it("keeps one course's page when another's comes back, and a failed one stays stale", () => {
+    let s = merge(null, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
+    s = merge(s, { ...base, history: { "23AI702": null } }, ["history:23AI702"], FRI);
+    expect(s.a.history?.["23AI701"]).toBeTruthy();
+    expect(s.a.history?.["23AI702"]).toBeNull();
+    expect(needs(s, "history:23AI702", FRI)).toBe(true);
+  });
+  it("keeps exam history for 30 days, or until the semester changes", () => {
+    const s = merge(null, { ...base, exams }, ["exams"], FRI);
+    expect(needs(s, "exams", FRI + 29 * 86_400_000)).toBe(false);
+    expect(needs(s, "exams", FRI + 30 * 86_400_000)).toBe(true);
+    const nextSem = merge(s, att({ student: { ...base.student, sem: "8" } }), [], FRI);
+    expect(nextSem.a.exams).toBe(exams);
+    expect(needs(nextSem, "exams", FRI)).toBe(true);
+  });
+  it("lists every stale page for a set of courses in one go", () => {
+    const s = merge(null, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
+    expect(stale(s, ["history:23AI701", "history:23AI702", "exams"], FRI)).toEqual(["history:23AI702", "exams"]);
   });
 });
