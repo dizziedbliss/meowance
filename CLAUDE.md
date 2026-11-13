@@ -69,14 +69,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - Timetable only shows the current week (no previous/next week).
 - Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
   calendar) — the data is now fetched, the math isn't wired up.
-- A real login through production hasn't been verified yet: the portal was down at launch, so it's
-  unknown whether it accepts Vercel's Mumbai IPs (a 502 `portal_down` from prod while a local login
-  works would mean it blocks them).
-- Live login is verified only against a fake portal in tests; the real portal hasn't been hit by this
-  code yet.
-
-## Deploy (Vercel)
-
+- The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
+  through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
+  student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs
+  vars are set for Production only, so previews can't test the proxy.
 - **Live:** https://meowance.vercel.app (project `dizziedbliss/meowance`, first deployed 2026-11-09).
   Firewall rule "attendance api limit": 60 requests/min per IP on `/api/attendance`, deny when
   exceeded (college Wi-Fi puts everyone behind one IP, so keep it generous). Previews are behind
