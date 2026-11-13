@@ -1,5 +1,6 @@
 import type { ClassRecord, Course } from "../lib/types";
-import { fmtPct, verdict, zoneName } from "../lib/verdict";
+import type { Sem } from "../lib/history";
+import { fmtPct, semVerdict, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
 import { Tally } from "./Tally";
 
@@ -20,8 +21,10 @@ export const toggleProps = (open: boolean, onToggle: () => void, label: string) 
   },
 });
 
-export function CourseRow({ course, classes, open, onToggle }: { course: Course; classes: ClassRecord[] | null; open: boolean; onToggle: () => void }) {
-  const v = verdict(course);
+type RowProps = { course: Course; classes: ClassRecord[] | null; sem: Sem | null; open: boolean; onToggle: () => void };
+
+export function CourseRow({ course, classes, sem, open, onToggle }: RowProps) {
+  const v = sem ? semVerdict(course, sem.total) : verdict(course);
   return (
     <div
       {...toggleProps(open, onToggle, `${course.name}: ${open ? "hide" : "show"} every class`)}
@@ -45,7 +48,7 @@ export function CourseRow({ course, classes, open, onToggle }: { course: Course;
         </b>
         <span className="mt-1 block text-sm text-ink-2">{v.sub}</span>
       </div>
-      <Tally course={course} zone={v.zone} classes={classes} className="col-span-full text-ink" />
+      <Tally course={course} zone={v.zone} classes={classes} budget={sem?.budget} className="col-span-full text-ink" />
     </div>
   );
 }

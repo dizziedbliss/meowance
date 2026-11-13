@@ -19,10 +19,10 @@ const titleCase = (s: string) => s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.t
 /** The pages the screen on view needs besides the dashboard. */
 function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView): Extra[] {
   if (!data) return [];
-  const each = (kind: "history" | "cie") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
+  const each = (kind: "history") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
   if (tab === "timetable") return ["timetable"];
   if (tab === "events") return ["calendar"];
-  if (tab === "scores") return scores === "past" ? ["exams"] : each("cie");
+  if (tab === "scores") return scores === "past" ? ["exams"] : [];
   return each("history"); // dated tally boxes; cached until a course's counts change
 }
 

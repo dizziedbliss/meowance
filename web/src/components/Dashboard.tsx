@@ -1,4 +1,4 @@
-import { squares } from "../lib/history";
+import { semOf, squares } from "../lib/history";
 import type { Attendance, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
@@ -12,15 +12,16 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
   const [worst, ...rest] = byPercent(data.courses);
   const toggle = (code: string) => () => onOpen(open === code ? null : code);
   const dated = (c: Course) => squares(c.attended, c.conducted, data.history?.[c.code]?.classes);
+  const sem = (c: Course) => semOf(c, data.history?.[c.code]);
   const panel = (code: string) =>
     open === code && (
       <div className={`border-b border-hair ${code === worst?.code ? "pt-4" : ""}`}>
-        <HistoryPanel course={data.courses.find((c) => c.code === code)!} history={data.history?.[code]} loading={loading} />
+        <HistoryPanel history={data.history?.[code]} loading={loading} />
       </div>
     );
   return (
     <>
-      {worst && <Slab course={worst} classes={dated(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
+      {worst && <Slab course={worst} classes={dated(worst)} sem={sem(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
       {worst && panel(worst.code)}
 
       {rest.length > 0 && (
@@ -30,12 +31,16 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
             <div aria-label="Tally key" className="flex flex-wrap gap-4 font-mono text-[11px] text-mut">
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 bg-ink" />pawsent</span>
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-mut)]" />bunked</span>
-              <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-orange)]" />still owe</span>
+              {rest.every((c) => sem(c)) ? (
+                <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-safe)]" />lives left this sem</span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-orange)]" />still owe</span>
+              )}
             </div>
           </div>
           {rest.map((c) => (
             <div key={c.code}>
-              <CourseRow course={c} classes={dated(c)} open={open === c.code} onToggle={toggle(c.code)} />
+              <CourseRow course={c} classes={dated(c)} sem={sem(c)} open={open === c.code} onToggle={toggle(c.code)} />
               {panel(c.code)}
             </div>
           ))}

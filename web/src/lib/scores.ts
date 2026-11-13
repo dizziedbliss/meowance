@@ -1,4 +1,4 @@
-import type { CIEDetails, Course } from "./types";
+import type { CIEPart, Course } from "./types";
 import type { Zone } from "./verdict";
 
 export type ScoreVerdict = {
@@ -41,16 +41,29 @@ export function scoreVerdict(c: Course): ScoreVerdict {
   return { zone, got, lost, left, max, head, sub: `${got} out of ${takenMax} so far.${tail}` };
 }
 
+/** One half of the SEE minimum: marks so far, the line, tests still to come. */
+export type SeePart = { got: number; need: number; left: number; status: "done" | "open" | "gone" };
+
+const SENIOR_LAST_BATCH = 23; // the 3 cie + 2 activity scheme; juniors' changed and isn't known yet
+const isCie = (name: string) => /^(se|cie)\s*\d/i.test(name);
+
+function seePart(parts: CIEPart[], need: number, tests: number): SeePart {
+  const marked = parts.filter((p) => !p.pending);
+  const got = marked.reduce((n, p) => n + (p.absent ? 0 : p.obtained), 0);
+  const left = Math.max(0, tests - marked.length);
+  const status = got >= need ? "done" : got + left * 10 >= need ? "open" : "gone";
+  return { got, need, left, status };
+}
+
 /**
- * The class average for one of the dashboard's tests ("SE1" matches the CIE
- * page's "CIE1" by number), or for the total ("total" → "Final IA").
+ * The minimum CIE marks to sit the SEE, for the 23 batch and older: 12 of 30
+ * from three cies and 8 of 20 from two activities. Null for juniors.
  */
-export function classAvg(part: string, d: CIEDetails | null | undefined): number | null {
-  if (!d) return null;
-  if (part === "total") return d.stats.find((s) => /final/i.test(s.name))?.classAvg ?? null;
-  const n = /(\d+)\s*$/.exec(part)?.[1];
-  if (!n) return null;
-  return d.stats.find((s) => /^CIE/i.test(s.name) && s.name.endsWith(n))?.classAvg ?? null;
+export function seeMin(c: Course, usn: string): { cie: SeePart; act: SeePart } | null {
+  const batch = Number(usn.slice(3, 5));
+  if (!(batch <= SENIOR_LAST_BATCH)) return null;
+  const parts = c.cie ?? [];
+  return { cie: seePart(parts.filter((p) => isCie(p.name)), 12, 3), act: seePart(parts.filter((p) => !isCie(p.name)), 8, 2) };
 }
 
 /** What a test is called on screen: the dashboard prints "SE1", students call it cie1. */

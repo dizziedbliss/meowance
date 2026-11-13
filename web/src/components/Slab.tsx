@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ClassRecord, Course } from "../lib/types";
-import { fmtPct, verdict, zoneName } from "../lib/verdict";
+import type { Sem } from "../lib/history";
+import { fmtPct, semVerdict, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
 import { toggleProps } from "./CourseRow";
 import { Tally } from "./Tally";
@@ -27,8 +28,10 @@ function useCountUp(target: number): number {
 }
 
 /** Your worst subject, as a slab in its zone's color. */
-export function Slab({ course, classes, open, onToggle }: { course: Course; classes: ClassRecord[] | null; open: boolean; onToggle: () => void }) {
-  const v = verdict(course);
+type SlabProps = { course: Course; classes: ClassRecord[] | null; sem: Sem | null; open: boolean; onToggle: () => void };
+
+export function Slab({ course, classes, sem, open, onToggle }: SlabProps) {
+  const v = sem ? semVerdict(course, sem.total) : verdict(course);
   const shown = useCountUp(course.percent);
 
   return (
@@ -69,7 +72,7 @@ export function Slab({ course, classes, open, onToggle }: { course: Course; clas
         )}
       </div>
 
-      <Tally course={course} zone={v.zone} classes={classes} onSlab pop className="col-span-full mt-5" />
+      <Tally course={course} zone={v.zone} classes={classes} budget={sem?.budget} onSlab pop className="col-span-full mt-5" />
     </section>
   );
 }

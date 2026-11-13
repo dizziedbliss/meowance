@@ -1,5 +1,5 @@
 import { shortDate } from "../lib/dates";
-import { classAvg, partLabel, scoreVerdict } from "../lib/scores";
+import { partLabel, scoreVerdict, type SeePart, seeMin } from "../lib/scores";
 import type { Attendance } from "../lib/types";
 import { PastSems } from "./PastSems";
 import { SubTabs } from "./SubTabs";
@@ -11,7 +11,20 @@ const fill = { dead: "bg-dead", fine: "bg-fine", safe: "bg-safe" } as const;
 
 type Props = { data: Attendance; view: ScoresView; onView: (v: ScoresView) => void; loading: boolean };
 
-/** This sem's CIE next to the class average, or past semesters' results: one at a time. */
+const seeTone = { done: "text-safe", open: "text-fine", gone: "text-dead" } as const;
+
+/** One half of the SEE minimum, e.g. "cie 9/12 · 3 more from the 1 left". */
+function seeLine(label: string, p: SeePart) {
+  const tail =
+    p.status === "done" ? "cleared" : p.status === "gone" ? "can't reach it anymore" : p.left === 0 ? "nothing left to score it in" : `${p.need - p.got} more from the ${p.left} left`;
+  return (
+    <span>
+      {label} {p.got}/{p.need} · <span className={seeTone[p.status]}>{tail}</span>
+    </span>
+  );
+}
+
+/** This sem's CIE with the minimum to sit the SEE, or past semesters' results: one at a time. */
 export function Scores({ data, view, onView, loading }: Props) {
   const rows = data.courses
     .map((c) => ({ c, v: scoreVerdict(c) }))
@@ -47,10 +60,9 @@ export function Scores({ data, view, onView, loading }: Props) {
         <PastSems exams={data.exams} loading={loading} />
       ) : (
       <>
-      <p className="mt-4 font-mono text-xs text-mut">cie so far, out of 50 each · class average next to yours · see marks come later</p>
+      <p className="mt-4 font-mono text-xs text-mut">cie so far, out of 50 each · see marks come later</p>
       {rows.map(({ c, v }) => {
-        const d = data.cieDetails?.[c.code];
-        const totalAvg = classAvg("total", d);
+        const min = seeMin(c, data.student.usn);
         return (
 
         <div
@@ -68,9 +80,9 @@ export function Scores({ data, view, onView, loading }: Props) {
           <div className="col-span-full md:col-span-1">
             <b className="block font-display text-[22px] font-extrabold leading-[1.15] tracking-[-.01em]">{v.head}</b>
             <span className="mt-1 block text-sm text-ink-2">{v.sub}</span>
-            {totalAvg !== null && (
-              <span className="mt-1 block font-mono text-xs text-mut">
-                class average {totalAvg}/{v.max} · you're {v.got >= totalAvg ? "above" : "below"} it
+            {min && (
+              <span className="mt-2 block font-mono text-xs text-mut">
+                to sit the see: {seeLine("cie", min.cie)} · {seeLine("activities", min.act)}
               </span>
             )}
           </div>
@@ -96,7 +108,6 @@ export function Scores({ data, view, onView, loading }: Props) {
                         {p.obtained}/{p.max}
                       </span>
                     )}
-                    {classAvg(p.name, d) !== null && <span className="text-mut"> · class {classAvg(p.name, d)}</span>}
                     {p.entered && <span className="text-mut"> · {shortDate(p.entered)}</span>}
                   </li>
                 ))}
@@ -106,7 +117,6 @@ export function Scores({ data, view, onView, loading }: Props) {
         </div>
         );
       })}
-      {loading && data.cieDetails === undefined && <p className="mt-4 font-mono text-xs text-mut">asking the portal for class averages…</p>}
       </>
       )}
     </section>

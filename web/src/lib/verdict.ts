@@ -68,3 +68,47 @@ export function verdict(c: Course): Verdict {
 export function byPercent(courses: Course[]): Course[] {
   return [...courses].sort((a, b) => a.percent - b.percent);
 }
+
+/**
+ * The verdict from the whole sem instead of "classes in a row": the portal's
+ * planned total for the course (holidays already left out) sets how many bunks
+ * 85 (or 75) allows all sem. Calm early in the sem, and not thrown by the
+ * portal being weeks behind on entering classes.
+ */
+/** Bunks the whole sem still allows: for 85, or for 75 once 85 is gone (negative: over even 75's). */
+export function semBudget(c: Course, total: number) {
+  const missed = c.conducted - c.attended;
+  const allow85 = Math.floor(total * 0.15 + 1e-9);
+  const allow75 = Math.floor(total * 0.25 + 1e-9);
+  return { missed, allow85, allow75, b85: allow85 - missed, b75: allow75 - missed };
+}
+
+export function semVerdict(c: Course, total: number): Verdict {
+  const { missed, allow85, allow75, b85, b75 } = semBudget(c, total);
+  if (b85 > 0) {
+    return {
+      zone: c.percent >= 85 ? "safe" : "fine",
+      head: { before: "you can bunk ", n: b85, after: " more this sem" },
+      sub: `${missed} bunked so far. the sem has ${total} classes, and 85 lets you miss ${allow85}.`,
+    };
+  }
+  if (b85 === 0) {
+    return {
+      zone: "fine",
+      head: { before: "", n: 0, after: " bunks left this sem" },
+      sub: `you've used all ${allow85} the sem allows for 85. show up to every class from here.`,
+    };
+  }
+  if (b75 >= 0) {
+    return {
+      zone: "fine",
+      head: { before: "", n: b75, after: " bunks left before 75" },
+      sub: `85's gone this sem: ${missed} missed, it only allowed ${allow85}. that's the fine. hold 75 at least.`,
+    };
+  }
+  return {
+    zone: "dead",
+    head: { before: "cooked for the sem", n: null, after: "" },
+    sub: `${missed} missed, more than the ${allow75} even 75 allows. talk to your faculty.`,
+  };
+}

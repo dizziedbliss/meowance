@@ -58,8 +58,11 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Conventions
 
 - **MCE rules:** 85%+ safe ("purring"); 75–85 fine zone (pays a fine unless back to 85); under 75 dead
-  zone (teachers cap at 75). Verdicts count **classes**, never days, and never assume how many
-  classes are left in the sem.
+  zone (teachers cap at 75). Verdicts count **classes**, never days. Once a course's history
+  is in, the verdict uses the portal's planned total for the sem (present + absent + still to go,
+  holidays already left out; checked against the real calendar 2026-11-13): "you can bunk N more
+  this sem" = 15% of the total minus bunks so far. Never "attend N to stay": the portal is often
+  weeks behind on entering classes, so its "still to go" count is stale.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
   screen, bottom nav is an overlay with its own solid background (it mustn't blend in). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
@@ -73,10 +76,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Not built yet
 
 - Timetable only shows the current week (no previous/next week).
-- Bunk advice uses the portal's own "still to go" count per course (`lib/history.ts`), phrased as
-  "you can bunk N" with the caveat that the faculty must take every class left, because the
-  portal's counts are often stale. CIE pass rules (3 cie + 2 activities, 12 + 8 to pass) aren't
-  built: the juniors' scheme differs and is unknown.
+- The SEE minimum (12 of 30 from the cies, 8 of 20 from the activities; `seeMin` in
+  `lib/scores.ts`) only shows for the 23 batch and older: the juniors' scheme changed and is unknown.
+- The CIE details page (class averages) is still parsed and fetchable server-side, but the UI
+  dropped it (Max: not useful).
 - The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
   through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
   student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs

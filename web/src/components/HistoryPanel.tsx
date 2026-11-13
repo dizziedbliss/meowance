@@ -1,11 +1,8 @@
 import { isoDayMonth } from "../lib/dates";
-import { bunksLeft } from "../lib/history";
-import type { Course, CourseHistory } from "../lib/types";
+import type { CourseHistory } from "../lib/types";
 
-const tone = { dead: "text-dead", fine: "text-fine", safe: "text-safe" } as const;
-
-/** Under a tapped course: when you bunked, who teaches it, and how many more bunks the sem allows. */
-export function HistoryPanel({ course, history, loading }: { course: Course; history: CourseHistory | null | undefined; loading: boolean }) {
+/** Under a tapped course: when you bunked, who teaches it, and how far behind the portal is. */
+export function HistoryPanel({ history, loading }: { history: CourseHistory | null | undefined; loading: boolean }) {
   if (!history) {
     return (
       <p className="pb-5 font-mono text-xs text-mut">
@@ -14,20 +11,18 @@ export function HistoryPanel({ course, history, loading }: { course: Course; his
     );
   }
   const bunked = history.classes.filter((c) => !c.present);
-  const advice = bunksLeft(course.attended, course.conducted, history.stillToGo);
+  const last = history.classes[history.classes.length - 1];
 
   return (
-    <div className="space-y-2 pb-5">
+    <div className="space-y-1.5 pb-5">
       <p className="text-sm text-ink-2">
         <span className="font-mono text-xs text-mut">bunked on </span>
         {bunked.length === 0 ? "never. respect." : bunked.map((c) => `${isoDayMonth(c.date)} (${c.start})`).join(" · ")}
       </p>
-      {advice && (
-        <p className={`font-display text-lg font-bold leading-snug ${tone[advice.zone]}`}>
-          {advice.line} <span className="font-body text-sm font-normal text-mut">only if your faculty takes every class left lol</span>
-        </p>
-      )}
-      {history.faculty && <p className="font-mono text-xs text-mut">taught by {history.faculty.toLowerCase()}</p>}
+      <p className="font-mono text-xs text-mut">
+        {history.faculty && <>taught by {history.faculty.toLowerCase()} · </>}
+        {last ? `the portal's last entry is ${isoDayMonth(last.date)}, anything after isn't counted yet` : "nothing entered on the portal yet"}
+      </p>
     </div>
   );
 }

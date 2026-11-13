@@ -1,26 +1,16 @@
-import type { ClassRecord } from "./types";
-import { type Zone, zoneOf } from "./verdict";
+import type { ClassRecord, Course, CourseHistory } from "./types";
+import { semBudget } from "./verdict";
 
-/** Classes you can bunk out of `left` and still end the sem at `target` (negative: out of reach). */
-const canBunk = (attended: number, conducted: number, left: number, target: number) =>
-  Math.floor(attended + left - target * (conducted + left) + 1e-9);
+/** The sem view of a course once its history is in: the planned total, and the bunks it allows. */
+export type Sem = { total: number; budget: { n: number; label: string } };
 
-/**
- * How many of the classes the portal still has planned you can bunk. The portal's
- * counts are often stale, so this is "you can bunk", never "you must attend";
- * the screen adds that it only holds if the faculty takes every class left.
- */
-export function bunksLeft(attended: number, conducted: number, left: number): { zone: Zone; line: string } | null {
-  if (left <= 0) return null;
-  const zone = zoneOf(conducted ? (attended / conducted) * 100 : 100);
-  const k85 = canBunk(attended, conducted, left, 0.85);
-  if (k85 >= left) return { zone, line: `you could bunk all ${left} left and still end on 85.` };
-  if (k85 > 0) return { zone, line: `you can bunk ${k85} of the ${left} left before the sem ends.` };
-  if (k85 === 0) return { zone, line: "no bunks left. miss one more and you end under 85." };
-  const k75 = canBunk(attended, conducted, left, 0.75);
-  if (k75 > 0) return { zone, line: `85's gone this sem. you can bunk ${k75} of the ${left} left and still end on 75.` };
-  if (k75 === 0) return { zone, line: `85's gone this sem. bunk none of the ${left} left and you scrape 75.` };
-  return { zone, line: `cooked. even all ${left} left won't get you to 75.` };
+export function semOf(c: Course, h: CourseHistory | null | undefined): Sem | null {
+  if (!h) return null;
+  const total = h.present + h.absent + h.stillToGo; // the portal's plan for the sem, holidays already left out
+  if (total <= 0) return null;
+  const b = semBudget(c, total);
+  const budget = b.b85 >= 0 ? { n: b.b85, label: b.b85 === 1 ? "life" : "lives" } : b.b75 >= 0 ? { n: b.b75, label: "before 75" } : { n: 0, label: "" };
+  return { total, budget };
 }
 
 /**
