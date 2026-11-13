@@ -11,6 +11,7 @@ import (
 	"math"
 	"net/http"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -25,7 +26,9 @@ type Fetcher interface {
 }
 
 // Request is the JSON body: dob is DDMMYYYY, matching how students type it.
-// Extras names the pages wanted besides the dashboard: "timetable", "calendar".
+// Extras names the pages wanted besides the dashboard: "timetable", "calendar",
+// "exams", and per course "history:<code>" (class by class) or "cie:<code>"
+// (class averages).
 type Request struct {
 	USN    string   `json:"usn"`
 	DOB    string   `json:"dob"`
@@ -68,6 +71,13 @@ type Response struct {
 	// Calendar is the semester's calendar of events: left out when not asked
 	// for, null when it couldn't be fetched.
 	Calendar json.RawMessage `json:"calendar,omitempty"`
+	// History and CIEDetails are keyed by course code, each null when its page
+	// couldn't be fetched; left out when not asked for.
+	History    map[string]*portal.CourseHistory `json:"history,omitempty"`
+	CIEDetails map[string]*portal.CIEDetails    `json:"cieDetails,omitempty"`
+	// Exams is every past semester's results: left out when not asked for,
+	// null when it couldn't be fetched.
+	Exams json.RawMessage `json:"exams,omitempty"`
 }
 
 // Error codes the UI maps to messages.
@@ -83,6 +93,19 @@ const (
 
 // Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
 var reUSN = regexp.MustCompile(`^4MC[0-9]{2}[A-Z]{2}[0-9]{3}$`)
+
+// A course code as the portal prints it (23AI701, 23OEEC71, 23AI704D).
+var reCourseCode = regexp.MustCompile(`^[0-9]{2}[A-Z0-9]{2,10}$`)
+
+// maxCourses caps per-course extras in one request; a semester has ~6 courses.
+const maxCourses = 20
+
+func appendOnce(list []string, s string) []string {
+	if slices.Contains(list, s) {
+		return list
+	}
+	return append(list, s)
+}
 
 // fetchBudget is how long one login may take, all retries included.
 var fetchBudget = 50 * time.Second
@@ -169,14 +192,24 @@ func validate(req Request, now time.Time) (string, time.Time, portal.Extras, boo
 		return "", time.Time{}, want, false
 	}
 	for _, e := range req.Extras {
-		switch e {
-		case "timetable":
+		kind, code, perCourse := strings.Cut(e, ":")
+		switch {
+		case e == "timetable":
 			want.Timetable = true
-		case "calendar":
+		case e == "calendar":
 			want.Calendar = true
+		case e == "exams":
+			want.Exams = true
+		case perCourse && reCourseCode.MatchString(code) && kind == "history":
+			want.History = appendOnce(want.History, code)
+		case perCourse && reCourseCode.MatchString(code) && kind == "cie":
+			want.CIE = appendOnce(want.CIE, code)
 		default:
 			return "", time.Time{}, want, false
 		}
+	}
+	if len(want.History) > maxCourses || len(want.CIE) > maxCourses {
+		return "", time.Time{}, want, false
 	}
 	return usn, dob, want, true
 }
@@ -202,6 +235,21 @@ func Build(snap *portal.Snapshot, usn string) Response {
 	}
 	if snap.Asked.Calendar {
 		out.Calendar = mustJSON(snap.Calendar)
+	}
+	if snap.Asked.Exams {
+		out.Exams = mustJSON(snap.Exams)
+	}
+	if len(snap.Asked.History) > 0 {
+		out.History = snap.History
+		if out.History == nil {
+			out.History = map[string]*portal.CourseHistory{}
+		}
+	}
+	if len(snap.Asked.CIE) > 0 {
+		out.CIEDetails = snap.CIE
+		if out.CIEDetails == nil {
+			out.CIEDetails = map[string]*portal.CIEDetails{}
+		}
 	}
 	for _, c := range d.Courses {
 		cie := c.CIE

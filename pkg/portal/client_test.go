@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -39,6 +40,14 @@ func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	extraPages := map[string][]byte{}
+	for task, file := range map[string]string{"attendencelist": "attendancelist.html", "ciedetails": "ciedetails.html", "getSemResult": "examhistory.html"} {
+		b, err := os.ReadFile(filepath.Join("testdata", file))
+		if err != nil {
+			t.Fatal(err)
+		}
+		extraPages[task] = b
+	}
 	var posts int32
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		sess, _ := r.Cookie("sess")
@@ -54,6 +63,8 @@ func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
 					w.Write(tt)
 				case "calenderdisplay":
 					w.Write(cal)
+				case "attendencelist", "ciedetails", "getSemResult":
+					w.Write(extraPages[r.URL.Query().Get("task")])
 				default:
 					w.Write(dash)
 				}
@@ -304,8 +315,36 @@ func TestFetchOnlyAskedExtras(t *testing.T) {
 		if got := [2]int32{hitCount(hits, "timetable"), hitCount(hits, "calenderdisplay")}; got != [2]int32{c.timetable, c.cal} {
 			t.Errorf("%+v: fetched timetable/calendar %v times, want %d/%d", c.want, got, c.timetable, c.cal)
 		}
-		if s.Asked != c.want || (s.Timetable != nil) != c.want.Timetable || (s.Calendar != nil) != c.want.Calendar {
+		if !reflect.DeepEqual(s.Asked, c.want) || (s.Timetable != nil) != c.want.Timetable || (s.Calendar != nil) != c.want.Calendar {
 			t.Errorf("%+v: snapshot asked=%+v timetable=%t calendar=%t", c.want, s.Asked, s.Timetable != nil, s.Calendar != nil)
 		}
+	}
+}
+
+func TestFetchHistoryPages(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	hits := pageHits(t, srv)
+	want := Extras{History: []string{"23AI701", "NOT-A-COURSE"}, CIE: []string{"23AI701"}, Exams: true}
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := [3]int32{hitCount(hits, "attendencelist"), hitCount(hits, "ciedetails"), hitCount(hits, "getSemResult")}; got != [3]int32{1, 1, 1} {
+		t.Errorf("fetched attendance list/cie/exams %v times, want 1 each (unknown codes skipped)", got)
+	}
+	if h := s.History["23AI701"]; h == nil || len(h.Classes) != 25 {
+		t.Errorf("history = %+v", s.History)
+	}
+	if _, asked := s.History["NOT-A-COURSE"]; asked {
+		t.Error("a code not on the dashboard should be left out, not fetched")
+	}
+	if d := s.CIE["23AI701"]; d == nil || len(d.Stats) != 3 {
+		t.Errorf("cie = %+v", s.CIE)
+	}
+	if s.Exams == nil || len(s.Exams.Sems) != 6 {
+		t.Errorf("exams = %+v", s.Exams)
+	}
+	if s.Timetable != nil || s.Calendar != nil {
+		t.Error("timetable/calendar fetched without being asked")
 	}
 }

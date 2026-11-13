@@ -20,7 +20,9 @@ import (
 	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
-type fixture struct{ dashboard, timetable, calendar string }
+// fixture serves saved pages. The attendance list and CIE page are one course's;
+// they're served for every course code asked for.
+type fixture struct{ dashboard, timetable, calendar, attendanceList, cieDetails, examHistory string }
 
 func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, error) {
 	select {
@@ -41,6 +43,29 @@ func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want port
 	}
 	if want.Calendar && f.calendar != "" {
 		s.Calendar = portal.ParseCalendar(f.calendar)
+	}
+	if want.Exams {
+		s.Exams, _ = portal.ParseExamHistory(f.examHistory)
+	}
+	for _, code := range want.History {
+		if s.History == nil {
+			s.History = map[string]*portal.CourseHistory{}
+		}
+		h, _ := portal.ParseAttendanceList(f.attendanceList)
+		if h != nil {
+			h.Code = code
+		}
+		s.History[code] = h
+	}
+	for _, code := range want.CIE {
+		if s.CIE == nil {
+			s.CIE = map[string]*portal.CIEDetails{}
+		}
+		x, _ := portal.ParseCIEDetails(f.cieDetails)
+		if x != nil {
+			x.Code = code
+		}
+		s.CIE[code] = x
 	}
 	return s, nil
 }
@@ -65,7 +90,11 @@ func main() {
 		dir := filepath.Dir(*fx)
 		tt, _ := os.ReadFile(filepath.Join(dir, "timetable.html"))
 		cal, _ := os.ReadFile(filepath.Join(dir, "calendar.html"))
-		f = fixture{dashboard: string(b), timetable: string(tt), calendar: string(cal)}
+		al, _ := os.ReadFile(filepath.Join(dir, "attendancelist.html"))
+		cie, _ := os.ReadFile(filepath.Join(dir, "ciedetails.html"))
+		ex, _ := os.ReadFile(filepath.Join(dir, "examhistory.html"))
+		f = fixture{dashboard: string(b), timetable: string(tt), calendar: string(cal),
+			attendanceList: string(al), cieDetails: string(cie), examHistory: string(ex)}
 		log.Printf("fixture mode: %s (timetable: %t, calendar: %t)", *fx, len(tt) > 0, len(cal) > 0)
 	}
 
