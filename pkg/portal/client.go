@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -96,11 +97,14 @@ type Extras struct {
 	Timetable, Calendar, Exams bool
 	History                    []string // course codes whose class-by-class attendance is wanted
 	CIE                        []string // course codes whose CIE page (class averages) is wanted
+	// AllHistory wants every course on the dashboard: a fresh login doesn't know
+	// the codes yet, and asking at login saves a second login right after.
+	AllHistory bool
 }
 
 // Any reports whether any extra page is wanted.
 func (e Extras) Any() bool {
-	return e.Timetable || e.Calendar || e.Exams || len(e.History) > 0 || len(e.CIE) > 0
+	return e.Timetable || e.Calendar || e.Exams || e.AllHistory || len(e.History) > 0 || len(e.CIE) > 0
 }
 
 // maxParallel caps the extra pages fetched at once, so a fresh browser asking
@@ -239,6 +243,14 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 	// 4. Asked-for extras, same session, like clicking through from the
 	// dashboard; in parallel (the cookie jar is safe for that). Best effort:
 	// any of them failing still returns the dashboard.
+	if want.AllHistory {
+		want.AllHistory = false
+		for _, co := range d.Courses {
+			if !slices.Contains(want.History, co.Code) {
+				want.History = append(want.History, co.Code)
+			}
+		}
+	}
 	snap := &Snapshot{Dashboard: d, Asked: want}
 	var (
 		wg   sync.WaitGroup

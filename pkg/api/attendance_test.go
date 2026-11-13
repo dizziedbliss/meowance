@@ -43,6 +43,13 @@ func (f *fakeFetcher) Fetch(_ context.Context, usn string, dob time.Time, want p
 		s.Exams = nil
 	}
 	s.History, s.CIE = nil, nil
+	if want.AllHistory { // like the real client: every dashboard course
+		want.History, want.AllHistory = nil, false
+		for _, c := range f.d.Dashboard.Courses {
+			want.History = append(want.History, c.Code)
+		}
+	}
+	s.Asked = want
 	for _, code := range want.History {
 		if s.History == nil {
 			s.History = map[string]*portal.CourseHistory{}
@@ -284,5 +291,20 @@ func TestAttendanceCapsCourseExtras(t *testing.T) {
 	body := `{"usn":"4MC00AA000","dob":"15082004","extras":[` + strings.Join(extras, ",") + `]}`
 	if rec := post(Attendance(&fakeFetcher{d: fixture(t)}), body); rec.Code != http.StatusBadRequest {
 		t.Fatalf("%d course extras: status %d, want 400", maxCourses+1, rec.Code)
+	}
+}
+
+func TestAttendanceHistoryAll(t *testing.T) {
+	f := &fakeFetcher{d: fixture(t)}
+	rec := post(Attendance(f), `{"usn":"4MC00AA000","dob":"15082004","extras":["history:all"]}`)
+	if rec.Code != http.StatusOK || !f.got.want.AllHistory {
+		t.Fatalf("status %d, asked %+v", rec.Code, f.got.want)
+	}
+	var resp struct {
+		History map[string]any `json:"history"`
+	}
+	json.Unmarshal(rec.Body.Bytes(), &resp)
+	if len(resp.History) != len(f.d.Dashboard.Courses) {
+		t.Errorf("history has %d courses, want all %d", len(resp.History), len(f.d.Dashboard.Courses))
 	}
 }

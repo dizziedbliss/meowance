@@ -27,8 +27,8 @@ type Fetcher interface {
 
 // Request is the JSON body: dob is DDMMYYYY, matching how students type it.
 // Extras names the pages wanted besides the dashboard: "timetable", "calendar",
-// "exams", and per course "history:<code>" (class by class) or "cie:<code>"
-// (class averages).
+// "exams", and per course "history:<code>" (class by class; "history:all" for
+// every course, used at login) or "cie:<code>" (class averages).
 type Request struct {
 	USN    string   `json:"usn"`
 	DOB    string   `json:"dob"`
@@ -200,6 +200,8 @@ func validate(req Request, now time.Time) (string, time.Time, portal.Extras, boo
 			want.Calendar = true
 		case e == "exams":
 			want.Exams = true
+		case e == "history:all":
+			want.AllHistory = true
 		case perCourse && reCourseCode.MatchString(code) && kind == "history":
 			want.History = appendOnce(want.History, code)
 		case perCourse && reCourseCode.MatchString(code) && kind == "cie":

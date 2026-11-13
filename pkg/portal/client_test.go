@@ -348,3 +348,18 @@ func TestFetchHistoryPages(t *testing.T) {
 		t.Error("timetable/calendar fetched without being asked")
 	}
 }
+
+func TestFetchAllHistory(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	hits := pageHits(t, srv)
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, Extras{AllHistory: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(s.Dashboard.Courses); hitCount(hits, "attendencelist") != int32(n) || len(s.History) != n {
+		t.Errorf("fetched %d attendance lists, history has %d entries; want one per course (%d)", hitCount(hits, "attendencelist"), len(s.History), n)
+	}
+	if len(s.Asked.History) != len(s.Dashboard.Courses) || s.Asked.AllHistory {
+		t.Errorf("Asked = %+v; want the expanded course list", s.Asked)
+	}
+}

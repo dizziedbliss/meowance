@@ -20,9 +20,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
     setErr(null);
     setBusy(true);
     try {
-      const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim());
+      // every course's class-by-class page comes along with the login, so the dated
+      // boxes are there at once (no second login right after); other tabs fetch when opened
+      const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim(), ["history:all"]);
       await saveCreds({ usn: usn.trim().toUpperCase(), dob: dob.trim() });
-      const s = merge(null, a, [], Date.now()); // dashboard only: tabs fetch their pages when opened
+      const got = Object.keys(a.history ?? {}).map((code) => `history:${code}` as const);
+      const s = merge(null, a, got, Date.now());
       saveData(s);
       onIn(s);
     } catch (x) {

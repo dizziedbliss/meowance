@@ -8,6 +8,18 @@ export type Post = {
 
 export const posts: Post[] = [
   {
+    when: "13 nov",
+    title: "receipts are real now",
+    body: "Now suggesting u to bunk on few days aswell- and absent and present dates are real and live, added exam historyyyy and faster thannnnn beforeeeeee :3",
+    sign: "Max!!",
+  },
+  {
+    when: "cooking",
+    title: "up next",
+    body: "CGPA suggestionssss, notes sharing..???",
+    sign: "Max!!",
+  },
+  {
     when: "11 nov (midnight ffs)",
     title: "Midnight Struggles",
     body: "Bro was trying so hard to block us, let them try blocking whole internet now, oh also found out some sneaky lil bugs- smashed em heh-",
