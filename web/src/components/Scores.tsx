@@ -1,12 +1,18 @@
 import { shortDate } from "../lib/dates";
-import { scoreVerdict } from "../lib/scores";
+import { classAvg, scoreVerdict } from "../lib/scores";
 import type { Attendance } from "../lib/types";
+import { PastSems } from "./PastSems";
+import { SubTabs } from "./SubTabs";
+
+export type ScoresView = "now" | "past";
 
 const text = { dead: "text-dead", fine: "text-fine", safe: "text-safe" } as const;
 const fill = { dead: "bg-dead", fine: "bg-fine", safe: "bg-safe" } as const;
 
-/** CIE so far, per subject: total out of 50, every test, and a got / lost / up-for-grabs bar. */
-export function Scores({ data }: { data: Attendance }) {
+type Props = { data: Attendance; view: ScoresView; onView: (v: ScoresView) => void; loading: boolean };
+
+/** This sem's CIE next to the class average, or past semesters' results: one at a time. */
+export function Scores({ data, view, onView, loading }: Props) {
   const rows = data.courses
     .map((c) => ({ c, v: scoreVerdict(c) }))
     // worst first; subjects with nothing marked go last
@@ -19,16 +25,34 @@ export function Scores({ data }: { data: Attendance }) {
           <h2 className="numeral text-[clamp(64px,11vw,128px)] leading-[.8] tracking-[-.03em]">
             scores<span className="text-orange">.</span>
           </h2>
-          <p className="mt-4 font-mono text-xs text-mut">cie so far, out of 50 each · see marks come later</p>
+          <SubTabs
+            label="Which scores"
+            className="mt-4"
+            tabs={[
+              { id: "now", text: "this sem" },
+              { id: "past", text: "past sems" },
+            ]}
+            active={view}
+            onTab={onView}
+          />
         </div>
-        <div aria-label="Bar key" className="flex flex-wrap gap-4 font-mono text-[11px] text-mut">
+        <div aria-label="Bar key" className={`flex flex-wrap gap-4 font-mono text-[11px] text-mut ${view === "now" ? "" : "invisible"}`}>
           <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 bg-ink" />got</span>
           <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-dead)]" />lost</span>
           <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 bg-hair-2" />still up for grabs</span>
         </div>
       </div>
 
-      {rows.map(({ c, v }) => (
+      {view === "past" ? (
+        <PastSems exams={data.exams} loading={loading} />
+      ) : (
+      <>
+      <p className="mt-4 font-mono text-xs text-mut">cie so far, out of 50 each · class average next to yours · see marks come later</p>
+      {rows.map(({ c, v }) => {
+        const d = data.cieDetails?.[c.code];
+        const totalAvg = classAvg("total", d);
+        return (
+
         <div
           key={c.code}
           className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3.5 border-b border-hair py-[22px] md:grid-cols-[minmax(0,1.25fr)_150px_minmax(0,1.25fr)] md:gap-x-8 md:py-[26px]"
@@ -44,6 +68,11 @@ export function Scores({ data }: { data: Attendance }) {
           <div className="col-span-full md:col-span-1">
             <b className="block font-display text-[22px] font-extrabold leading-[1.15] tracking-[-.01em]">{v.head}</b>
             <span className="mt-1 block text-sm text-ink-2">{v.sub}</span>
+            {totalAvg !== null && (
+              <span className="mt-1 block font-mono text-xs text-mut">
+                class average {totalAvg}/{v.max} · you're {v.got >= totalAvg ? "above" : "below"} it
+              </span>
+            )}
           </div>
 
           <div className="col-span-full">
@@ -67,6 +96,7 @@ export function Scores({ data }: { data: Attendance }) {
                         {p.obtained}/{p.max}
                       </span>
                     )}
+                    {classAvg(p.name, d) !== null && <span className="text-mut"> · class {classAvg(p.name, d)}</span>}
                     {p.entered && <span className="text-mut"> · {shortDate(p.entered)}</span>}
                   </li>
                 ))}
@@ -74,7 +104,11 @@ export function Scores({ data }: { data: Attendance }) {
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
+      {loading && data.cieDetails === undefined && <p className="mt-4 font-mono text-xs text-mut">asking the portal for class averages…</p>}
+      </>
+      )}
     </section>
   );
 }

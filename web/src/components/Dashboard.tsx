@@ -1,13 +1,25 @@
 import type { Attendance } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
+import { HistoryPanel } from "./HistoryPanel";
 import { Slab } from "./Slab";
 
-export function Dashboard({ data }: { data: Attendance }) {
+type Props = { data: Attendance; open: string | null; onOpen: (code: string | null) => void; loading: boolean };
+
+/** One course open at a time, so the page never grows into a scroll marathon. */
+export function Dashboard({ data, open, onOpen, loading }: Props) {
   const [worst, ...rest] = byPercent(data.courses);
+  const toggle = (code: string) => () => onOpen(open === code ? null : code);
+  const panel = (code: string) =>
+    open === code && (
+      <div className="border-b border-hair">
+        <HistoryPanel course={data.courses.find((c) => c.code === code)!} history={data.history?.[code]} loading={loading} />
+      </div>
+    );
   return (
     <>
-      {worst && <Slab course={worst} />}
+      {worst && <Slab course={worst} open={open === worst.code} onToggle={toggle(worst.code)} />}
+      {worst && panel(worst.code)}
 
       {rest.length > 0 && (
         <>
@@ -20,7 +32,10 @@ export function Dashboard({ data }: { data: Attendance }) {
             </div>
           </div>
           {rest.map((c) => (
-            <CourseRow key={c.code} course={c} />
+            <div key={c.code}>
+              <CourseRow course={c} open={open === c.code} onToggle={toggle(c.code)} />
+              {panel(c.code)}
+            </div>
           ))}
         </>
       )}

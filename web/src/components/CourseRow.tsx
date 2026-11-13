@@ -5,14 +5,33 @@ import { Tally } from "./Tally";
 
 const color = { dead: "text-dead", fine: "text-fine", safe: "text-safe" } as const;
 
-export function CourseRow({ course }: { course: Course }) {
+/** Tap (or Enter) toggles the course's class-by-class receipts below it. */
+export const toggleProps = (open: boolean, onToggle: () => void, label: string) => ({
+  role: "button",
+  tabIndex: 0,
+  "aria-expanded": open,
+  "aria-label": label,
+  onClick: onToggle,
+  onKeyDown: (e: React.KeyboardEvent) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      onToggle();
+    }
+  },
+});
+
+export function CourseRow({ course, open, onToggle }: { course: Course; open: boolean; onToggle: () => void }) {
   const v = verdict(course);
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3.5 border-b border-hair py-[22px] md:grid-cols-[minmax(0,1.25fr)_150px_minmax(0,1.25fr)] md:gap-x-8 md:py-[26px]">
+    <div
+      {...toggleProps(open, onToggle, `${course.name}: ${open ? "hide" : "show"} every class`)}
+      className={`grid cursor-pointer grid-cols-[minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3.5 py-[22px] md:grid-cols-[minmax(0,1.25fr)_150px_minmax(0,1.25fr)] md:gap-x-8 md:py-[26px] ${open ? "" : "border-b border-hair"}`}
+    >
       <div>
         <div className="text-lg font-semibold leading-tight">{course.name}</div>
         <div className="mt-1 font-mono text-xs text-mut">
-          {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted}
+          {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted} ·{" "}
+          <span className="text-ink-2">{open ? "hide receipts ↑" : "receipts ↓"}</span>
         </div>
       </div>
       <div className={`numeral text-[60px] leading-[.8] tracking-[-.02em] md:text-[72px] ${color[v.zone]}`}>

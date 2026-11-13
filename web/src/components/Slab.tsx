@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { Course } from "../lib/types";
 import { fmtPct, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
+import { toggleProps } from "./CourseRow";
 import { Tally } from "./Tally";
 
 const bg = { dead: "bg-dead", fine: "bg-fine", safe: "bg-safe" } as const;
@@ -26,14 +27,14 @@ function useCountUp(target: number): number {
 }
 
 /** Your worst subject, as a slab in its zone's color. */
-export function Slab({ course }: { course: Course }) {
+export function Slab({ course, open, onToggle }: { course: Course; open: boolean; onToggle: () => void }) {
   const v = verdict(course);
   const shown = useCountUp(course.percent);
 
   return (
     <section
-      aria-label={`lowest: ${course.name}`}
-      className={`${bg[v.zone]} text-on-slab grid gap-y-6 px-[22px] pt-6 pb-[26px] md:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)] md:gap-x-11 md:gap-y-1.5 md:px-[34px] md:pt-[30px] md:pb-8`}
+      {...toggleProps(open, onToggle, `lowest: ${course.name}. ${open ? "hide" : "show"} every class`)}
+      className={`${bg[v.zone]} text-on-slab grid cursor-pointer gap-y-6 px-[22px] pt-6 pb-[26px] md:grid-cols-[minmax(0,1.15fr)_minmax(0,.85fr)] md:gap-x-11 md:gap-y-1.5 md:px-[34px] md:pt-[30px] md:pb-8`}
     >
       <div className="col-span-full mb-1.5 flex items-center justify-between font-mono text-xs">
         <span>your problem child rn</span>
@@ -48,7 +49,7 @@ export function Slab({ course }: { course: Course }) {
         <div className="mt-4 font-display text-[clamp(20px,2.3vw,27px)] font-bold leading-[1.12] tracking-[-.01em]">
           {course.name}
           <span className="mt-1.5 block font-mono text-xs font-normal tracking-normal opacity-70">
-            {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted}
+            {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted} · {open ? "hide receipts ↑" : "receipts ↓"}
           </span>
         </div>
       </div>

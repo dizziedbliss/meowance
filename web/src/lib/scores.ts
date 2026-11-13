@@ -1,4 +1,4 @@
-import type { Course } from "./types";
+import type { CIEDetails, Course } from "./types";
 import type { Zone } from "./verdict";
 
 export type ScoreVerdict = {
@@ -39,4 +39,16 @@ export function scoreVerdict(c: Course): ScoreVerdict {
   const head = zone === "safe" ? "cooking fr" : zone === "fine" ? "mid, but alive" : "it's giving retest energy";
   const tail = ghosted.length ? ` also you ghosted ${listNames(ghosted)}. bold move.` : "";
   return { zone, got, lost, left, max, head, sub: `${got} out of ${takenMax} so far.${tail}` };
+}
+
+/**
+ * The class average for one of the dashboard's tests ("SE1" matches the CIE
+ * page's "CIE1" by number), or for the total ("total" → "Final IA").
+ */
+export function classAvg(part: string, d: CIEDetails | null | undefined): number | null {
+  if (!d) return null;
+  if (part === "total") return d.stats.find((s) => /final/i.test(s.name))?.classAvg ?? null;
+  const n = /(\d+)\s*$/.exec(part)?.[1];
+  if (!n) return null;
+  return d.stats.find((s) => /^CIE/i.test(s.name) && s.name.endsWith(n))?.classAvg ?? null;
 }
