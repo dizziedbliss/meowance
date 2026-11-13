@@ -72,7 +72,7 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   "facts to know": a prediction mustn't talk anyone out of classes, and teachers rarely take or
   enter every planned class. Never use the portal's "still to go" as classes really left: it's stale.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
-  screen, bottom nav is an overlay on a solid logo-orange (#FF7700) bar with dark text (it mustn't blend in). No endless
+  screen, bottom nav is a background-less overlay over the dark fade, labels split by hairlines, active tab underlined in orange (Max rejected a solid bar: "ew"). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
   (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.
@@ -100,9 +100,13 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   Firewall rule "attendance api limit": 60 requests/min per IP on `/api/attendance`, deny when
   exceeded (college Wi-Fi puts everyone behind one IP, so keep it generous). Previews are behind
   Vercel Authentication; use `vercel curl <url>` to test them.
-- **Deploys only happen from the CLI**: `git.deploymentEnabled: false`, because Vercel aimed the first
-  branch push of the new project at production. Preview: `vercel deploy`. Production: `vercel deploy
-  --prod`, only with Max's OK. `.vercelignore` keeps `.env*`, `.vercel`, deps, builds and HARs out of uploads.
+- **Every push to `main` deploys production** (Vercel's Git integration, production branch `main`).
+  `git.deploymentEnabled` is `{"**": false, "main": true}`: other branches don't deploy (a branch
+  deploys if any rule matching it is true; unlisted branches would default to true). So merging to
+  `main` is shipping: only with Max's OK. Previews by hand: `vercel deploy`. `.vercelignore` keeps
+  `.env*`, `.vercel`, deps, builds and HARs out of CLI uploads.
+- **CI** (`.github/workflows/ci.yml`) on pushes to `main` and every PR: gofmt, `go vet`, `go test
+  -race`, and in `web/` `npm ci`, typecheck, tests, build. It reports; it doesn't block deploys.
 - Shared Go code lives in `pkg/`, not `internal/`: Vercel compiles `/api` as its own package
   (`handler/api`), and Go forbids it importing another module's `internal/`.
 - `vercel.json`: functions run in `bom1` (Mumbai, near the portal), 60s max; security headers on every
