@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { posts } from "../data/board";
 import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "../lib/api";
 import { portalAsleep } from "../lib/dates";
@@ -6,10 +6,19 @@ import { merge, type Stored } from "../lib/cache";
 import { saveCreds, saveData } from "../lib/vault";
 import { Logo } from "./Logo";
 
+/** What the button says while the portal takes its sweet time (one line every 1.6s, the last one stays). */
+const waiting = ["logging into contineo…", "sniffing out your bunks…", "pawing through your classes…", "counting classes, not days…", "almost purring…"];
+
 export function Login({ onIn }: { onIn: (s: Stored) => void }) {
   const [usn, setUsn] = useState("");
   const [dob, setDob] = useState("");
   const [busy, setBusy] = useState(false);
+  const [line, setLine] = useState(0);
+  useEffect(() => {
+    if (!busy) return setLine(0);
+    const id = setInterval(() => setLine((i) => Math.min(i + 1, waiting.length - 1)), 1600);
+    return () => clearInterval(id);
+  }, [busy]);
   const [err, setErr] = useState<string | null>(null);
   const [older, setOlder] = useState(false); // phones: the two newest posts, the rest on request
 
@@ -106,10 +115,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
             <button
               type="submit"
               disabled={busy}
-              className="group flex w-full items-center justify-between gap-3 bg-orange px-5 py-[17px] font-display text-xl font-extrabold tracking-[-.01em] text-[#140b00] transition-colors hover:bg-orange-hi disabled:cursor-wait disabled:opacity-80"
+              aria-busy={busy}
+              className={`group relative flex w-full items-center justify-between gap-3 overflow-hidden bg-orange px-5 py-[17px] font-display text-xl font-extrabold tracking-[-.01em] text-[#140b00] transition-colors hover:bg-orange-hi disabled:cursor-wait ${busy ? "busy" : ""}`}
             >
-              <span>{busy ? "pulling your receipts…" : "show me the damage"}</span>
-              <span className="font-mono font-medium transition-transform group-hover:translate-x-1.5">→</span>
+              <span aria-live="polite">{busy ? waiting[line] : "show me the damage"}</span>
+              <span className={`font-mono font-medium transition-transform ${busy ? "nudge" : "group-hover:translate-x-1.5"}`}>→</span>
+              {busy && <i aria-hidden className="sweep" />}
             </button>
             <p role="alert" className="mt-3 min-h-5 text-sm text-dead">{err}</p>
           </form>
