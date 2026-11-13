@@ -81,6 +81,9 @@ const (
 // Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
 var reUSN = regexp.MustCompile(`^4MC[0-9]{2}[A-Z]{2}[0-9]{3}$`)
 
+// fetchBudget is how long one login may take, all retries included.
+var fetchBudget = 50 * time.Second
+
 // Attendance returns the POST /api/attendance handler.
 func Attendance(f Fetcher) http.HandlerFunc {
 	return attendance(f, newLimiter(time.Now))
@@ -115,7 +118,11 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			return
 		}
 
-		snap, err := f.Fetch(r.Context(), usn, dob)
+		// Finish before Vercel's 60s cap kills us: a cut-off function sends its own
+		// 504 page and never releases the reserved try.
+		ctx, cancel := context.WithTimeout(r.Context(), fetchBudget)
+		snap, err := f.Fetch(ctx, usn, dob)
+		cancel()
 		if errors.Is(err, portal.ErrBadLogin) {
 			// a wrong birthday: the reserved attempt stays counted
 			writeErr(w, http.StatusUnauthorized, CodeBadLogin)

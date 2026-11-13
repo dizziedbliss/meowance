@@ -139,13 +139,30 @@ func TestFetchForbiddenWithoutProxyFailsFast(t *testing.T) {
 
 func TestProxySessionRotate(t *testing.T) {
 	p := newProxySession("u", "secret", "proxy:1")
-	a, _ := p.url(nil)
-	p.rotate()
-	b, _ := p.url(nil)
-	if a.User.Username() == b.User.Username() {
-		t.Fatal("rotate kept the same session ID")
+	first := p.current()
+	p.rotate(first)
+	second := p.current()
+	if second == first {
+		t.Fatal("rotate kept the blocked session ID")
 	}
-	if pw, _ := b.User.Password(); pw != "secret" || b.Host != "proxy:1" {
-		t.Fatalf("proxy URL lost its auth or host: %s", b.Redacted())
+	p.rotate(first) // a second login reporting the same block: already handled
+	if p.current() != second {
+		t.Fatal("a stale rotate replaced the fresh session")
+	}
+	u, _ := p.url(httptest.NewRequest(http.MethodGet, "/", nil))
+	if pw, _ := u.User.Password(); pw != "secret" || u.Host != "proxy:1" || !strings.HasSuffix(u.User.Username(), second) {
+		t.Fatalf("proxy URL lost its auth, host or session: %s", u.Redacted())
+	}
+}
+
+// A login in flight keeps its exit IP even when another login rotates.
+func TestProxySessionPinnedPerLogin(t *testing.T) {
+	p := newProxySession("u", "secret", "proxy:1")
+	pinned := p.current()
+	req := httptest.NewRequest(http.MethodGet, "/", nil).WithContext(withSession(context.Background(), pinned))
+	p.rotate(pinned)
+	u, _ := p.url(req)
+	if !strings.HasSuffix(u.User.Username(), pinned) {
+		t.Fatalf("in-flight request moved to %s after another login rotated", u.User.Username())
 	}
 }

@@ -1,6 +1,7 @@
 package portal
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -32,24 +33,47 @@ func newProxySession(user, pass, addr string) *proxySession {
 	return &proxySession{user: user, pass: pass, addr: addr, id: newSessionID()}
 }
 
-// url is the http.Transport Proxy func: read on every new connection, so a
-// rotation applies to the very next request.
-func (p *proxySession) url(*http.Request) (*url.URL, error) {
+type sessionKey struct{}
+
+// withSession pins every request made with ctx to one session ID, so a
+// rotation by another student's login can't move this one to a new IP midway
+// (the portal's cookie and CSRF token were issued to the old one).
+func withSession(ctx context.Context, id string) context.Context {
+	return context.WithValue(ctx, sessionKey{}, id)
+}
+
+// current is the session ID new logins should use.
+func (p *proxySession) current() string {
 	p.mu.Lock()
-	id := p.id
-	p.mu.Unlock()
+	defer p.mu.Unlock()
+	return p.id
+}
+
+// url is the http.Transport Proxy func, called for every request. The session
+// ID is part of the proxy URL, so a different ID gets its own pooled
+// connections (and its own CONNECT tunnel) and a different exit IP.
+func (p *proxySession) url(r *http.Request) (*url.URL, error) {
+	id, _ := r.Context().Value(sessionKey{}).(string)
+	if id == "" {
+		id = p.current()
+	}
 	name := fmt.Sprintf("customer-%s-cc-%s-city-%s-sessid-%s", p.user, proxyCountry, proxyCity, id)
 	return &url.URL{Scheme: "http", User: url.UserPassword(name, p.pass), Host: p.addr}, nil
 }
 
-// rotate switches to a new session ID (a new exit IP).
-func (p *proxySession) rotate() {
+// rotate retires a session ID that got blocked. Only the first of several
+// logins that hit the same block rotates; the rest find it already replaced.
+func (p *proxySession) rotate(blocked string) {
 	p.mu.Lock()
+	if p.id != blocked {
+		p.mu.Unlock()
+		return
+	}
 	p.id = newSessionID()
 	tr := p.tr
 	p.mu.Unlock()
 	if tr != nil {
-		tr.CloseIdleConnections()
+		tr.CloseIdleConnections() // drop the blocked IP's idle tunnels now, not in 30s
 	}
 }
 

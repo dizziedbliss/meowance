@@ -235,3 +235,20 @@ func TestPageTitle(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A portal that hangs must not run past the caller's deadline, retries included.
+func TestFetchStopsAtDeadline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	c := newTestClient(srv.URL)
+	c.Retries, c.Backoff = 5, 10*time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := c.Fetch(ctx, testUSN, testDOB)
+	if !errors.Is(err, ErrPortalDown) || time.Since(start) > time.Second {
+		t.Fatalf("err = %v after %v, want ErrPortalDown right at the deadline", err, time.Since(start))
+	}
+}

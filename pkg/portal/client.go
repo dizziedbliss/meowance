@@ -117,17 +117,23 @@ func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time) (*Snapsho
 			case <-time.After(c.Backoff):
 			}
 		}
+		actx, session := ctx, ""
+		if c.proxy != nil {
+			session = c.proxy.current()
+			actx = withSession(ctx, session) // one exit IP for this whole attempt
+		}
 		var s *Snapshot
-		s, err = c.fetchOnce(ctx, usn, dob)
+		s, err = c.fetchOnce(actx, usn, dob)
 		switch {
 		case errors.Is(err, ErrForbidden):
-			// Blocked before the login was looked at, so retrying is safe; a new
-			// exit IP is the only thing that can change the answer.
+			// Only a new exit IP can change a 403. Retrying may log in again, which
+			// is harmless: a wrong birthday comes back as the login page, never a
+			// 403, so it can't be counted twice.
 			if c.proxy == nil {
 				return nil, err
 			}
 			c.logf("portal: 403 on attempt %d/%d, rotating proxy session", attempt+1, c.Retries+1)
-			c.proxy.rotate()
+			c.proxy.rotate(session)
 		case errors.Is(err, ErrPortalDown):
 		default:
 			return s, err // success, bad login, or changed markup: retrying won't help

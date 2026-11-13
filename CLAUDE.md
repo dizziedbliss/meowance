@@ -31,7 +31,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
   is never parsed); `calendar.go` the semester dates, holidays, exam days and events. `proxy.go`: with
   `OXYLABS_USERNAME`/`OXYLABS_PASSWORD` set, requests go through a sticky residential proxy session
-  (the portal blocks datacenter IPs); a 403 rotates the session and retries. The login POST is sent
+  (the portal blocks datacenter IPs). Each login attempt is pinned to one session ID via its
+  context; a 403 retires only that ID and retries. The handler gives a login 50s in all
+  (`fetchBudget`), under Vercel's 60s cap. The login POST is sent
   exactly once per attempt (a test counts it).
 - **`pkg/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
   target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.

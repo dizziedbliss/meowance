@@ -147,3 +147,22 @@ func TestAttendanceRejectsGET(t *testing.T) {
 		t.Fatalf("status %d, want 405", rec.Code)
 	}
 }
+
+// hangingFetcher is a portal that never answers: it waits for the deadline.
+type hangingFetcher struct{}
+
+func (hangingFetcher) Fetch(ctx context.Context, _ string, _ time.Time) (*portal.Snapshot, error) {
+	<-ctx.Done()
+	return nil, portal.ErrPortalDown
+}
+
+func TestAttendanceGivesUpWithinBudget(t *testing.T) {
+	old := fetchBudget
+	fetchBudget = 50 * time.Millisecond
+	t.Cleanup(func() { fetchBudget = old })
+	start := time.Now()
+	rec := post(Attendance(hangingFetcher{}), `{"usn":"4MC00AA001","dob":"15082004"}`)
+	if rec.Code != http.StatusBadGateway || time.Since(start) > time.Second {
+		t.Fatalf("got %d after %v, want a 502 portal_down at the budget", rec.Code, time.Since(start))
+	}
+}
