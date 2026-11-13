@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "./api";
+import { ApiError, dobOk, errorCopy, fetchAttendance, sendFeedback, usnOk } from "./api";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -49,5 +49,26 @@ describe("input checks", () => {
     expect(dobOk("01011969")).toBe(false);
     expect(dobOk("01012999")).toBe(false);
     expect(dobOk("1508200")).toBe(false);
+  });
+});
+
+describe("sendFeedback", () => {
+  it("posts usn + message and resolves on ok", async () => {
+    const f = vi.fn(async () => new Response('{"ok":true}', { status: 200 }));
+    vi.stubGlobal("fetch", f);
+    await expect(sendFeedback("4MC00AA000", "hi")).resolves.toBeUndefined();
+    expect(f).toHaveBeenCalledWith("/api/feedback", expect.objectContaining({ method: "POST", body: '{"usn":"4MC00AA000","message":"hi"}' }));
+  });
+  it("turns failures into copy", async () => {
+    for (const [status, body, want] of [
+      [429, { error: "too_many_tries" }, "that's a lot of feedback"],
+      [503, { error: "feedback_off" }, "napping"],
+      [502, { error: "feedback_failed" }, "couldn't send it"],
+    ] as const) {
+      reply(status, body);
+      await expect(sendFeedback("4MC00AA000", "hi")).rejects.toThrow(want);
+    }
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("offline"); }));
+    await expect(sendFeedback("4MC00AA000", "hi")).rejects.toThrow("offline");
   });
 });

@@ -13,6 +13,9 @@
   "functions": {
     "api/attendance.go": {
       "maxDuration": 60
+    },
+    "api/feedback/index.go": {
+      "maxDuration": 20
     }
   },
   "headers": [

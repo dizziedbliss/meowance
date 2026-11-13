@@ -2,6 +2,7 @@ import { semTotal, squares } from "../lib/history";
 import type { Attendance, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
+import { FeedbackBox } from "./FeedbackBox";
 import { HistoryPanel } from "./HistoryPanel";
 import { Slab } from "./Slab";
 
@@ -58,6 +59,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
           </p>
         </div>
       </footer>
+      <FeedbackBox usn={data.student.usn} />
     </>
   );
 }

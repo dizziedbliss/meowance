@@ -37,6 +37,12 @@ func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want port
 	if err != nil {
 		return nil, err
 	}
+	if want.AllHistory { // like the real client: every course on the dashboard
+		want.AllHistory = false
+		for _, c := range d.Courses {
+			want.History = append(want.History, c.Code)
+		}
+	}
 	s := &portal.Snapshot{Dashboard: d, Asked: want}
 	if want.Timetable && f.timetable != "" {
 		s.Timetable = portal.ParseTimetable(f.timetable)
@@ -100,6 +106,20 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.Handle("/api/attendance", api.Attendance(f))
+	// feedback: sent for real with RESEND_API_KEY/FEEDBACK_FROM/FEEDBACK_TO set, logged otherwise
+	var mail api.Mailer = logMailer{}
+	if m := api.ResendFromEnv(); m != nil {
+		mail = m
+	}
+	mux.Handle("/api/feedback", api.Feedback(mail))
 	log.Printf("listening on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))
+}
+
+// logMailer prints feedback instead of emailing it (local runs without Resend).
+type logMailer struct{}
+
+func (logMailer) Send(_ context.Context, usn, message string) error {
+	log.Printf("feedback (not sent, no RESEND_API_KEY) from %s: %q", usn, message)
+	return nil
 }

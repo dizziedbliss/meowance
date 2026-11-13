@@ -31,6 +31,8 @@ in it is invented. It is nobody's real record.
 - **Timetable:** this week, one day at a time, each class tagged by whether that subject can afford a bunk.
 - **Scores:** this sem's CIE marks and the minimum to sit the SEE; past sems' grades, SGPA and CGPA.
 - **Events:** the semester calendar: what's next, working days left.
+- **Tell max:** a feedback box under the dashboard that emails the message (with the sender's USN)
+  through Resend. Locally, without `RESEND_API_KEY`, the dev server just logs it.
 
 Pages other than the dashboard are fetched only when you open them, and cached in your browser
 until they change (the timetable for a week, the calendar for 7 days, a course's history until

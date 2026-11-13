@@ -45,6 +45,13 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed`/`portal_blocked` (portal 403s our
   IP) 502. `Cache-Control: no-store`.
 - **`api/attendance.go`**: the Vercel Go function; just wraps `pkg/api` with the real client.
+- **`api/feedback/index.go`** (own folder: two `Handler`s can't share a Go package): `POST
+  /api/feedback {usn, message}` emails Max through Resend (`pkg/api/feedback.go`, plain text, stdlib
+  HTTP). Env: `RESEND_API_KEY`, `FEEDBACK_FROM` (`meowance <feedback@dizziedbliss.lol>`, verified
+  for sending in Max's own Resend account, no Vercel integration: it needs a DNS-owned domain),
+  `FEEDBACK_TO` (Max's inbox; never in the repo). Missing env → 503 `feedback_off`; the devserver
+  logs feedback instead. Limits: 1000 chars, 5/IP/hour, 100/instance/hour; failed sends don't count.
+  The USN is whatever the browser sends (not verified).
 - **`cmd/devserver`**: same handler locally, optional fixture mode.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
