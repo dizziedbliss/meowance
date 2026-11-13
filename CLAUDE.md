@@ -68,9 +68,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
   (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.
-- Credentials are never stored server-side or logged. Test fixtures are PII-scrubbed (USN
-  `4MC00AA000`, name `STUDENT`, every lecturer name `FACULTY`, all profile photos); never commit real
-  student data or HARs. Scrub by markup position, then grep for real names.
+- Credentials are never stored server-side or logged. Test fixtures are **mock data**: real page layouts, but
+  every personal value invented (USN `4MC00AA000`, `STUDENT`, lecturers `FACULTY`, the generic
+  avatar, and invented counts, class dates, CIE marks, exam dates, grades, section). Scrubbing names
+  isn't enough; never commit real student data or HARs. Verify by parsing old vs new values.
 - Go: stdlib-first. Web: exact-pinned deps, `npm ci`.
 
 ## Not built yet

@@ -18,14 +18,16 @@ Tap a course to see when you bunked (hover a box on desktop):
 | --- | --- | --- | --- |
 | ![](docs/screenshots/phone-dashboard.webp) | ![](docs/screenshots/phone-timetable.webp) | ![](docs/screenshots/phone-scores.webp) | ![](docs/screenshots/phone-past.webp) |
 
-The screenshots use the mock data in `pkg/portal/testdata` (a fake student, fake grades), not anyone's real record.
+The screenshots use the mock data in `pkg/portal/testdata`: every name, number, date and grade
+in it is invented. It is nobody's real record.
 
 ## What it shows
 
 - **Dashboard:** every course's attendance, worst first. Each class is a box in real order:
-  filled = pawsent, hollow = bunked, green = bunks the sem still allows. The verdict comes from the
-  sem's total classes ("you can bunk 1 more this sem"), so it stays sane even when the portal is
-  weeks behind on entering classes.
+  filled = pawsent, hollow = bunked, green = predicted bunks left. The verdict comes from the
+  sem's total classes ("predicted bunks left: 1"), so it stays sane even when the portal is weeks
+  behind on entering classes. It's a prediction: teachers rarely take or enter every planned
+  class, so it's mostly right, not a promise.
 - **Timetable:** this week, one day at a time, each class tagged by whether that subject can afford a bunk.
 - **Scores:** this sem's CIE marks and the minimum to sit the SEE; past sems' grades, SGPA and CGPA.
 - **Events:** the semester calendar: what's next, working days left.
@@ -96,9 +98,11 @@ cd web && npm run typecheck && npm run build
 
 ## Test data
 
-Everything in `pkg/portal/testdata` is scrubbed: the student is `STUDENT` with USN `4MC00AA000`,
-every lecturer is `FACULTY`, every photo is the generic avatar, and exam marks and grades are made
-up. Never commit real student data or HAR files (`*.har` is git-ignored).
+Everything in `pkg/portal/testdata` is mock data: the page layouts come from the real portal, but
+the student (`STUDENT`, USN `4MC00AA000`), lecturers (`FACULTY`), attendance counts and dates, CIE
+marks, exam dates and grades are all invented, and every photo is the generic avatar. The weekly
+timetable and the semester calendar are real class-level schedules (no student's record). Never commit
+real student data or HAR files (`*.har` is git-ignored).
 
 ## Deploy
 

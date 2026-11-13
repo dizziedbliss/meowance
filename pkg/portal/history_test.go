@@ -25,18 +25,18 @@ func TestParseAttendanceList(t *testing.T) {
 	if h.Code != "23AI701" || h.Name != "Cloud Computing" || h.Faculty != "FACULTY" {
 		t.Errorf("course = %q %q by %q", h.Code, h.Name, h.Faculty)
 	}
-	if h.Present != 20 || h.Absent != 5 || h.StillToGo != 20 {
-		t.Errorf("counts = %d present, %d absent, %d to go; want 20/5/20", h.Present, h.Absent, h.StillToGo)
+	if h.Present != 18 || h.Absent != 6 || h.StillToGo != 21 {
+		t.Errorf("counts = %d present, %d absent, %d to go; want 18/6/21", h.Present, h.Absent, h.StillToGo)
 	}
-	if len(h.Classes) != 25 {
-		t.Fatalf("classes = %d, want 25 (20 present + 5 absent)", len(h.Classes))
+	if len(h.Classes) != 24 {
+		t.Fatalf("classes = %d, want 24 (18 present + 6 absent)", len(h.Classes))
 	}
 	// Oldest first, by date then start time; dates as YYYY-MM-DD.
 	first, last := h.Classes[0], h.Classes[len(h.Classes)-1]
 	if first != (ClassRecord{Date: "2026-08-11", Start: "11:00", End: "12:00", Present: true}) {
 		t.Errorf("first = %+v", first)
 	}
-	if last.Date != "2026-10-07" || last.Start != "14:00" || last.End != "16:00" {
+	if last.Date != "2026-09-30" || last.Start != "14:00" || last.End != "16:00" {
 		t.Errorf("last = %+v", last)
 	}
 	for i := 1; i < len(h.Classes); i++ {
@@ -51,7 +51,7 @@ func TestParseAttendanceList(t *testing.T) {
 			absent = append(absent, c.Date)
 		}
 	}
-	if strings.Join(absent, ",") != "2026-08-18,2026-08-19,2026-09-09,2026-09-23,2026-10-06" {
+	if strings.Join(absent, ",") != "2026-08-12,2026-08-26,2026-09-02,2026-09-15,2026-09-22,2026-09-30" {
 		t.Errorf("absent dates = %v", absent)
 	}
 }
@@ -65,9 +65,9 @@ func TestParseCIEDetails(t *testing.T) {
 		t.Errorf("code = %q", d.Code)
 	}
 	want := []CIEStat{
-		{Name: "CIE1", Obtained: 0, ClassAvg: 7, Max: 10},
-		{Name: "CIE2", Obtained: 9, ClassAvg: 8, Max: 10},
-		{Name: "Final IA", Obtained: 9, ClassAvg: 15, Max: 50},
+		{Name: "CIE1", Obtained: 6, ClassAvg: 6, Max: 10},
+		{Name: "CIE2", Obtained: 7, ClassAvg: 7, Max: 10},
+		{Name: "Final IA", Obtained: 13, ClassAvg: 14, Max: 50},
 	}
 	if len(d.Stats) != len(want) {
 		t.Fatalf("stats = %+v", d.Stats)
@@ -105,7 +105,7 @@ func TestParseExamHistory(t *testing.T) {
 		t.Errorf("courses = %d, want 55", n)
 	}
 	c := s1.Courses[0]
-	if c != (ExamCourse{Code: "23ESC145", Name: "Introduction to C Programming", CIE: 37, SEE: 31, Total: 68, Date: "Feb-2024", Credits: 3, Earned: 3, GPA: 7, Grade: "B+"}) {
+	if c != (ExamCourse{Code: "23ESC145", Name: "Introduction to C Programming", CIE: 37, SEE: 31, Total: 68, Date: "Mar-2024", Credits: 3, Earned: 3, GPA: 7, Grade: "B+"}) {
 		t.Errorf("first course = %+v", c)
 	}
 	var audit *ExamCourse

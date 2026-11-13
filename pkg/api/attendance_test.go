@@ -105,9 +105,9 @@ func TestAttendanceOK(t *testing.T) {
 		t.Errorf("student = %+v", resp.Student)
 	}
 	want := map[string]Course{
-		"23AI701":  {Percent: 80, Need75: 0, Need85: 9, Skip85: 0},
-		"23AI704D": {Percent: 71.4, Need75: 2, Need85: 13, Skip85: 0},
-		"23OEEC71": {Percent: 100, Need75: 0, Need85: 0, Skip85: 0},
+		"23AI701":  {Percent: 75, Need75: 0, Need85: 16, Skip85: 0},
+		"23AI704D": {Percent: 69.2, Need75: 3, Need85: 14, Skip85: 0},
+		"23OEEC71": {Percent: 100, Need75: 0, Need85: 0, Skip85: 1},
 	}
 	for _, c := range resp.Courses {
 		w, ok := want[c.Code]
@@ -118,7 +118,7 @@ func TestAttendanceOK(t *testing.T) {
 			t.Errorf("%s = %+v, want %+v", c.Code, c, w)
 		}
 	}
-	if cloud := resp.Courses[0]; len(cloud.CIE) != 2 || cloud.CIETotal != 9 || cloud.CIEMax != 50 || !cloud.CIE[0].Absent {
+	if cloud := resp.Courses[0]; len(cloud.CIE) != 2 || cloud.CIETotal != 13 || cloud.CIEMax != 50 || cloud.CIE[0].Obtained != 6 {
 		t.Errorf("23AI701 CIE = %+v total %v/%v", cloud.CIE, cloud.CIETotal, cloud.CIEMax)
 	}
 	var days []portal.Day
@@ -262,7 +262,7 @@ func TestAttendanceHistoryExtras(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
 	}
-	if got := resp.History["23AI701"]; got == nil || got.StillToGo != 20 || len(got.Classes) != 25 {
+	if got := resp.History["23AI701"]; got == nil || got.StillToGo != 21 || len(got.Classes) != 24 {
 		t.Errorf("history 23AI701 = %+v", got)
 	}
 	if v, ok := resp.History["23AI702"]; !ok || v != nil {

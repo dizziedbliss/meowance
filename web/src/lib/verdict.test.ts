@@ -59,9 +59,11 @@ describe("semVerdict (from the sem's total classes, so stale portal counts don't
   it("counts the bunks the whole sem still allows for 85", () => {
     // 45 classes: 85% lets you miss 6; 5 missed → 1 left
     const v = semVerdict(c(20, 25), 45);
-    expect(v.head).toEqual({ before: "you can bunk ", n: 1, after: " more this sem" });
+    expect(v.head).toEqual({ before: "predicted bunks left: ", n: 1, after: "" });
     expect(v.zone).toBe("fine");
-    expect(v.sub).toBe("5 bunked so far. the sem has 45 classes, and 85 lets you miss 6.");
+    expect(v.sub).toBe(
+      "5 bunked so far, of the 6 that 85 allows across the sem's 45 classes. mostly right, but teachers rarely take or enter every class, so don't spend them all.",
+    );
   });
   it("is calm early in the sem even when today's % looks bad", () => {
     const v = semVerdict(c(10, 14), 45); // 71% today, but only 4 missed of the 6 allowed
@@ -73,11 +75,11 @@ describe("semVerdict (from the sem's total classes, so stale portal counts don't
   });
   it("says zero when the budget is used up", () => {
     const v = semVerdict(c(19, 25), 45);
-    expect(v.head).toEqual({ before: "", n: 0, after: " bunks left this sem" });
+    expect(v.head).toEqual({ before: "predicted bunks left: ", n: 0, after: "" });
   });
   it("falls back to 75 once 85 is gone", () => {
     const v = semVerdict(c(16, 25), 45); // 9 missed: 85 allowed 6, 75 allows 11
-    expect(v.head).toEqual({ before: "", n: 2, after: " bunks left before 75" });
+    expect(v.head).toEqual({ before: "85's gone. predicted bunks before 75: ", n: 2, after: "" });
     expect(v.zone).toBe("fine");
   });
   it("says cooked past the 75 budget", () => {

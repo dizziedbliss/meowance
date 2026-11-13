@@ -88,22 +88,22 @@ export function semVerdict(c: Course, total: number): Verdict {
   if (b85 > 0) {
     return {
       zone: c.percent >= 85 ? "safe" : "fine",
-      head: { before: "you can bunk ", n: b85, after: " more this sem" },
-      sub: `${missed} bunked so far. the sem has ${total} classes, and 85 lets you miss ${allow85}.`,
+      head: { before: "predicted bunks left: ", n: b85, after: "" },
+      sub: `${missed} bunked so far, of the ${allow85} that 85 allows across the sem's ${total} classes. mostly right, but teachers rarely take or enter every class, so don't spend them all.`,
     };
   }
   if (b85 === 0) {
     return {
       zone: "fine",
-      head: { before: "", n: 0, after: " bunks left this sem" },
-      sub: `you've used all ${allow85} the sem allows for 85. show up to every class from here.`,
+      head: { before: "predicted bunks left: ", n: 0, after: "" },
+      sub: `you've used all ${allow85} that 85 allows this sem. show up to every class from here.`,
     };
   }
   if (b75 >= 0) {
     return {
       zone: "fine",
-      head: { before: "", n: b75, after: " bunks left before 75" },
-      sub: `85's gone this sem: ${missed} missed, it only allowed ${allow85}. that's the fine. hold 75 at least.`,
+      head: { before: "85's gone. predicted bunks before 75: ", n: b75, after: "" },
+      sub: `${missed} missed, 85 only allowed ${allow85}. that's the fine. it's a prediction, so hold 75 with room to spare.`,
     };
   }
   return {

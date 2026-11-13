@@ -32,7 +32,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 bg-ink" />pawsent</span>
               <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-mut)]" />bunked</span>
               {rest.every((c) => sem(c)) ? (
-                <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-safe)]" />lives left this sem</span>
+                <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-safe)]" />predicted lives</span>
               ) : (
                 <span className="inline-flex items-center gap-1.5"><i className="inline-block h-2.5 w-2.5 shadow-[inset_0_0_0_1.5px_var(--color-orange)]" />still owe</span>
               )}

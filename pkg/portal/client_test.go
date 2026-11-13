@@ -117,7 +117,7 @@ func TestFetchSuccess(t *testing.T) {
 		t.Fatalf("Fetch: %v", err)
 	}
 	d := s.Dashboard
-	if len(d.Courses) != 5 || d.Courses[0].Code != "23AI701" || d.Courses[0].Attended != 20 {
+	if len(d.Courses) != 5 || d.Courses[0].Code != "23AI701" || d.Courses[0].Attended != 18 {
 		t.Fatalf("unexpected dashboard: %+v", d.Courses)
 	}
 	if len(s.Timetable) != 4 || s.Timetable[0].Weekday != "Monday" {
@@ -332,7 +332,7 @@ func TestFetchHistoryPages(t *testing.T) {
 	if got := [3]int32{hitCount(hits, "attendencelist"), hitCount(hits, "ciedetails"), hitCount(hits, "getSemResult")}; got != [3]int32{1, 1, 1} {
 		t.Errorf("fetched attendance list/cie/exams %v times, want 1 each (unknown codes skipped)", got)
 	}
-	if h := s.History["23AI701"]; h == nil || len(h.Classes) != 25 {
+	if h := s.History["23AI701"]; h == nil || len(h.Classes) != 24 {
 		t.Errorf("history = %+v", s.History)
 	}
 	if _, asked := s.History["NOT-A-COURSE"]; asked {
