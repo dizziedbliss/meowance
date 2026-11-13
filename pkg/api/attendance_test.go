@@ -126,6 +126,7 @@ func TestAttendanceErrors(t *testing.T) {
 		{"wrong creds", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrBadLogin, 401, CodeBadLogin},
 		{"portal down", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalDown, 502, CodePortalDown},
 		{"portal changed", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalChanged, 502, CodePortalChanged},
+		{"portal blocks us", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrForbidden, 502, CodePortalBlocked},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

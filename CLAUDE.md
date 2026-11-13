@@ -29,13 +29,17 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   the same session, with the dashboard as Referer (best effort: nil on failure). `Client.Logf` logs
   one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
   dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
-  is never parsed); `calendar.go` the semester dates, holidays, exam days and events.
+  is never parsed); `calendar.go` the semester dates, holidays, exam days and events. `proxy.go`: with
+  `OXYLABS_USERNAME`/`OXYLABS_PASSWORD` set, requests go through a sticky residential proxy session
+  (the portal blocks datacenter IPs); a 403 rotates the session and retries. The login POST is sent
+  exactly once per attempt (a test counts it).
 - **`pkg/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
   target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.
 - **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY}` → `{student, courses, timetable}`
   with `need75`, `need85`, `skip85` and `cie`/`cieTotal`/`cieMax` per course; `timetable` is null
   when it couldn't be fetched. Validates MCE USNs (`4MC…`) and real dates. Error codes:
-  `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed` 502. `Cache-Control: no-store`.
+  `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed`/`portal_blocked` (portal 403s our
+  IP) 502. `Cache-Control: no-store`.
 - **`api/attendance.go`**: the Vercel Go function; just wraps `pkg/api` with the real client.
 - **`cmd/devserver`**: same handler locally, optional fixture mode.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy

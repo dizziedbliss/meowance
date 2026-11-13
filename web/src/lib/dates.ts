@@ -29,3 +29,11 @@ export function shortDate(s: string): string {
   const m = /^(\d{1,2})\w*\s+([A-Za-z]{3})/.exec(s.trim());
   return m ? `${+m[1]} ${m[2].toLowerCase()}` : s.toLowerCase();
 }
+
+/** The hour (0–23) in India, wherever the viewer is. */
+export function istHour(now = new Date()): number {
+  return new Date(now.getTime() + 5.5 * 3_600_000).getUTCHours(); // IST is UTC+5:30, no DST
+}
+
+/** The portal goes down most nights, roughly midnight to 6am IST. */
+export const portalAsleep = (now = new Date()) => istHour(now) < 6;

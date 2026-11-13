@@ -74,8 +74,8 @@ const (
 	CodePortalDown    = "portal_down"
 	CodePortalChanged = "portal_changed"
 	CodeTooManyTries  = "too_many_tries"
+	CodePortalBlocked = "portal_blocked"
 	CodeInternal      = "internal"
-	CodeForbidden     = "portal_blocked"
 )
 
 // Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
@@ -123,7 +123,7 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 		}
 		lim.done(p, usn, ip, err == nil)
 		if err != nil {
-			log.Printf("fetch Failed: %v", err)
+			log.Printf("fetch failed: %v", err)
 		}
 		switch {
 		case err == nil:
@@ -131,7 +131,8 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			writeErr(w, http.StatusBadGateway, CodePortalDown)
 			return
 		case errors.Is(err, portal.ErrForbidden):
-			writeErr(w, http.StatusForbidden, CodeForbidden)
+			// the portal is blocking our IP: an upstream failure, not the student's
+			writeErr(w, http.StatusBadGateway, CodePortalBlocked)
 			return
 		case errors.Is(err, portal.ErrPortalChanged):
 			writeErr(w, http.StatusBadGateway, CodePortalChanged)

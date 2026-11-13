@@ -127,6 +127,12 @@ func TestLimiterSuccessAndOutagesDontCount(t *testing.T) {
 			t.Fatalf("portal down: %d, want 502 (outages must not use up tries)", rec.Code)
 		}
 	}
+	blocked := attendance(&fakeFetcher{err: portal.ErrForbidden}, lim)
+	for range triesPerIP + 5 {
+		if rec := postFrom(blocked, "1.1.1.1", victim); rec.Code != http.StatusBadGateway {
+			t.Fatalf("portal blocking us: %d, want 502 (our IP problem must not use up tries)", rec.Code)
+		}
+	}
 	for range triesPerIP - 1 {
 		postFrom(wrong, "1.1.1.1", victim)
 	}

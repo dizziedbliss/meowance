@@ -30,10 +30,10 @@ export function Dashboard({ data }: { data: Attendance }) {
         <div className="max-w-[68ch] space-y-2 text-[13.5px] text-ink-2">
           <p>we're not mce. not affiliated, not sponsored, not even friends. just kids who got tired of doing this math by hand.</p>
           <p>
-            we don't keep your data, never. usn and birthday go in, attendance come out, we forget you even exist. your attendance keeps
+            we don't keep your data, never. usn and birthday go in, attendance comes out, we forget you even exist. your attendance keeps
             the bill. <strong className="text-ink">we don't.</strong>
           </p>
-          <p>use your own usn. stalking on someone else's is weird wihtout their permission. don't be that guy.</p>
+          <p>use your own usn. stalking on someone else's is weird without their permission. don't be that guy.</p>
         </div>
       </footer>
     </>

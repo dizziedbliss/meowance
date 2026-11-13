@@ -53,6 +53,9 @@ func main() {
 	client := portal.NewClient()
 	client.Logf = log.Printf // per-page status for debugging; never credentials or URLs
 	var f api.Fetcher = client
+	if *fx == "" {
+		log.Printf("real portal, residential proxy: %t (OXYLABS_USERNAME/PASSWORD)", client.Proxied())
+	}
 	if *fx != "" {
 		b, err := os.ReadFile(*fx)
 		if err != nil {
