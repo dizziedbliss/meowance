@@ -1,4 +1,4 @@
-import type { Course } from "../lib/types";
+import type { ClassRecord, Course } from "../lib/types";
 import { fmtPct, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
 import { Tally } from "./Tally";
@@ -20,7 +20,7 @@ export const toggleProps = (open: boolean, onToggle: () => void, label: string) 
   },
 });
 
-export function CourseRow({ course, open, onToggle }: { course: Course; open: boolean; onToggle: () => void }) {
+export function CourseRow({ course, classes, open, onToggle }: { course: Course; classes: ClassRecord[] | null; open: boolean; onToggle: () => void }) {
   const v = verdict(course);
   return (
     <div
@@ -31,7 +31,7 @@ export function CourseRow({ course, open, onToggle }: { course: Course; open: bo
         <div className="text-lg font-semibold leading-tight">{course.name}</div>
         <div className="mt-1 font-mono text-xs text-mut">
           {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted} ·{" "}
-          <span className="text-ink-2">{open ? "hide receipts ↑" : "receipts ↓"}</span>
+          <span className="text-ink-2">{open ? "hide ↑" : "when did i bunk ↓"}</span>
         </div>
       </div>
       <div className={`numeral text-[60px] leading-[.8] tracking-[-.02em] md:text-[72px] ${color[v.zone]}`}>
@@ -45,7 +45,7 @@ export function CourseRow({ course, open, onToggle }: { course: Course; open: bo
         </b>
         <span className="mt-1 block text-sm text-ink-2">{v.sub}</span>
       </div>
-      <Tally course={course} zone={v.zone} className="col-span-full text-ink" />
+      <Tally course={course} zone={v.zone} classes={classes} className="col-span-full text-ink" />
     </div>
   );
 }

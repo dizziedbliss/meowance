@@ -1,14 +1,22 @@
-import type { Course } from "../lib/types";
+import { isoDayMonth } from "../lib/dates";
+import type { ClassRecord, Course } from "../lib/types";
 import type { Zone } from "../lib/verdict";
 
-type Props = { course: Course; zone: Zone; onSlab?: boolean; pop?: boolean; className?: string };
+type Props = { course: Course; zone: Zone; classes?: ClassRecord[] | null; onSlab?: boolean; pop?: boolean; className?: string };
+
+const tip = (c: ClassRecord) => `${c.present ? "pawsent" : "bunked"} · ${isoDayMonth(c.date)} · ${c.start}`;
 
 /** One square per class: filled = attended, hollow = bunked, orange outline = classes still owed. */
-export function Tally({ course: c, zone, onSlab, pop, className = "" }: Props) {
+export function Tally({ course: c, zone, classes, onSlab, pop, className = "" }: Props) {
   const sq: React.ReactNode[] = [];
   let k = 0;
-  for (let i = 0; i < c.attended; i++) sq.push(<i key={`a${i}`} className="at" />);
-  for (let i = 0; i < c.conducted - c.attended; i++) sq.push(<i key={`m${i}`} className="ms" />);
+  if (classes) {
+    // the real order, each box dated (hover on pc; the row's receipts list the bunks on phones)
+    for (const cl of classes) sq.push(<i key={cl.date + cl.start} className={cl.present ? "at" : "ms"} data-tip={tip(cl)} />);
+  } else {
+    for (let i = 0; i < c.attended; i++) sq.push(<i key={`a${i}`} className="at" />);
+    for (let i = 0; i < c.conducted - c.attended; i++) sq.push(<i key={`m${i}`} className="ms" />);
+  }
 
   const owe = (n: number, label: string, prefix: string) => {
     for (let i = 0; i < n; i++) sq.push(<i key={`${prefix}${i}`} className="nd" style={{ "--k": k++ } as React.CSSProperties} />);

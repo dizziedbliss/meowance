@@ -11,6 +11,7 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
   const [dob, setDob] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const [older, setOlder] = useState(false); // phones: the two newest posts, the rest on request
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -122,8 +123,10 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
             Changelogs
           </h2>
           <div className="mt-2.5 mb-7 font-mono text-xs text-mut">What happened??</div>
+          {/* desktop: its own scroll box, so the login page stays one screen tall */}
+          <div className="thin-scroll md:max-h-[min(560px,calc(100dvh-260px))] md:overflow-y-auto md:pr-4">
           {posts.map((p, i) => (
-            <article key={p.title} className={`post ${i === 0 ? "new" : ""}`}>
+            <article key={p.title} className={`post ${i === 0 ? "new" : ""} ${i >= 2 && !older ? "max-md:hidden" : ""}`}>
               <div className="flex gap-2.5 font-mono text-[11px] text-mut">
                 <span>{p.when}</span>
                 {i === 0 && <b className="font-medium text-orange">new</b>}
@@ -133,6 +136,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
               <div className="mt-1 font-sign text-[21px] leading-none text-orange">{p.sign}</div>
             </article>
           ))}
+          </div>
+          {posts.length > 2 && (
+            <button type="button" onClick={() => setOlder(!older)} className="font-mono text-xs text-ink-2 hover:text-ink md:hidden">
+              {older ? "fewer posts ↑" : `older posts (${posts.length - 2}) ↓`}
+            </button>
+          )}
         </aside>
       </div>
     </main>

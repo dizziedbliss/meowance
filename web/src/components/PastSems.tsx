@@ -28,12 +28,15 @@ export function PastSems({ exams, loading }: { exams: ExamHistory | null | undef
             cgpa · {exams.creditsEarned} credits earned · {exams.creditsToEarn} to go
           </p>
         </div>
-        <SubTabs
-          label="Semester"
-          tabs={exams.sems.map((s) => ({ id: String(s.sem), text: `sem ${s.sem}` }))}
-          active={String(sem.sem)}
-          onTab={(id) => setPicked(+id)}
-        />
+        <div className="flex items-center gap-3">
+          <span className="font-mono text-xs text-mut">sem</span>
+          <SubTabs
+            label="Semester"
+            tabs={exams.sems.map((s) => ({ id: String(s.sem), text: String(s.sem) }))}
+            active={String(sem.sem)}
+            onTab={(id) => setPicked(+id)}
+          />
+        </div>
       </div>
 
       <p className="py-4 font-mono text-xs text-mut">

@@ -21,7 +21,7 @@ export function scoreVerdict(c: Course): ScoreVerdict {
   const got = c.cieTotal ?? taken.reduce((s, p) => s + (p.absent ? 0 : p.obtained), 0);
   const lost = Math.max(0, takenMax - got);
   const left = Math.max(0, max - takenMax);
-  const ghosted = taken.filter((p) => p.absent).map((p) => p.name.toLowerCase());
+  const ghosted = taken.filter((p) => p.absent).map((p) => partLabel(p.name));
 
   if (taken.length === 0) {
     return { zone: null, got: 0, lost: 0, left: max, max, head: "no marks yet", sub: "the calm before the storm." };
@@ -52,3 +52,6 @@ export function classAvg(part: string, d: CIEDetails | null | undefined): number
   if (!n) return null;
   return d.stats.find((s) => /^CIE/i.test(s.name) && s.name.endsWith(n))?.classAvg ?? null;
 }
+
+/** What a test is called on screen: the dashboard prints "SE1", students call it cie1. */
+export const partLabel = (name: string) => name.toLowerCase().replace(/^se(\d+)$/, "cie$1");

@@ -1,5 +1,5 @@
 import { shortDate } from "../lib/dates";
-import { classAvg, scoreVerdict } from "../lib/scores";
+import { classAvg, partLabel, scoreVerdict } from "../lib/scores";
 import type { Attendance } from "../lib/types";
 import { PastSems } from "./PastSems";
 import { SubTabs } from "./SubTabs";
@@ -86,7 +86,7 @@ export function Scores({ data, view, onView, loading }: Props) {
               <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 font-mono text-xs">
                 {(c.cie ?? []).map((p) => (
                   <li key={p.name} className="text-ink-2">
-                    <span className="text-ink">{p.name.toLowerCase()}</span>{" "}
+                    <span className="text-ink">{partLabel(p.name)}</span>{" "}
                     {p.absent ? (
                       <span className="text-dead">ghosted</span>
                     ) : p.pending ? (

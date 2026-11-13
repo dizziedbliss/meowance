@@ -17,13 +17,13 @@ const titleCase = (s: string) => s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.t
 
 /** The page a tab needs besides the dashboard. */
 /** The pages the screen on view needs besides the dashboard. */
-function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView, open: string | null): Extra[] {
+function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView): Extra[] {
   if (!data) return [];
   const each = (kind: "history" | "cie") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
   if (tab === "timetable") return ["timetable"];
   if (tab === "events") return ["calendar"];
   if (tab === "scores") return scores === "past" ? ["exams"] : each("cie");
-  return open ? each("history") : []; // one course opened: fetch them all in one login, so the next is instant
+  return each("history"); // dated tally boxes; cached until a course's counts change
 }
 
 export default function App() {
@@ -65,8 +65,8 @@ export default function App() {
     }
   }
 
-  const view = extrasFor(data, tab, scoresView, open);
-  const viewKey = `${tab}|${scoresView}|${open}`;
+  const view = extrasFor(data, tab, scoresView);
+  const viewKey = `${tab}|${scoresView}`;
   useEffect(() => {
     tried.current = new Set();
   }, [viewKey]);

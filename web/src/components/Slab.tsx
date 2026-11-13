@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { Course } from "../lib/types";
+import type { ClassRecord, Course } from "../lib/types";
 import { fmtPct, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
 import { toggleProps } from "./CourseRow";
@@ -27,7 +27,7 @@ function useCountUp(target: number): number {
 }
 
 /** Your worst subject, as a slab in its zone's color. */
-export function Slab({ course, open, onToggle }: { course: Course; open: boolean; onToggle: () => void }) {
+export function Slab({ course, classes, open, onToggle }: { course: Course; classes: ClassRecord[] | null; open: boolean; onToggle: () => void }) {
   const v = verdict(course);
   const shown = useCountUp(course.percent);
 
@@ -49,7 +49,7 @@ export function Slab({ course, open, onToggle }: { course: Course; open: boolean
         <div className="mt-4 font-display text-[clamp(20px,2.3vw,27px)] font-bold leading-[1.12] tracking-[-.01em]">
           {course.name}
           <span className="mt-1.5 block font-mono text-xs font-normal tracking-normal opacity-70">
-            {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted} · {open ? "hide receipts ↑" : "receipts ↓"}
+            {course.code.toLowerCase()} · pawsent {course.attended} of {course.conducted} · {open ? "hide ↑" : "when did i bunk ↓"}
           </span>
         </div>
       </div>
@@ -69,7 +69,7 @@ export function Slab({ course, open, onToggle }: { course: Course; open: boolean
         )}
       </div>
 
-      <Tally course={course} zone={v.zone} onSlab pop className="col-span-full mt-5" />
+      <Tally course={course} zone={v.zone} classes={classes} onSlab pop className="col-span-full mt-5" />
     </section>
   );
 }

@@ -61,7 +61,8 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   zone (teachers cap at 75). Verdicts count **classes**, never days, and never assume how many
   classes are left in the sem.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
-  screen, bottom nav is a background-less overlay. Copy is lowercase, dry gen-z; cat puns welcome
+  screen, bottom nav is an overlay with its own solid background (it mustn't blend in). No endless
+  scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
   (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.
 - Credentials are never stored server-side or logged. Test fixtures are PII-scrubbed (USN
@@ -72,8 +73,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Not built yet
 
 - Timetable only shows the current week (no previous/next week).
-- Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
-  calendar) — the data is now fetched, the math isn't wired up.
+- Bunk advice uses the portal's own "still to go" count per course (`lib/history.ts`), phrased as
+  "you can bunk N" with the caveat that the faculty must take every class left, because the
+  portal's counts are often stale. CIE pass rules (3 cie + 2 activities, 12 + 8 to pass) aren't
+  built: the juniors' scheme differs and is unknown.
 - The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
   through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
   student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs
