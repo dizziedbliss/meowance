@@ -29,13 +29,19 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   the same session, with the dashboard as Referer (best effort: nil on failure). `Client.Logf` logs
   one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
   dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
-  is never parsed); `calendar.go` the semester dates, holidays, exam days and events.
+  is never parsed); `calendar.go` the semester dates, holidays, exam days and events. `proxy.go`: with
+  `OXYLABS_USERNAME`/`OXYLABS_PASSWORD` set, requests go through a sticky residential proxy session
+  (the portal blocks datacenter IPs). Each login attempt is pinned to one session ID via its
+  context; a 403 retires only that ID and retries. The handler gives a login 50s in all
+  (`fetchBudget`), under Vercel's 60s cap. The login POST is sent
+  exactly once per attempt (a test counts it).
 - **`pkg/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
   target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.
 - **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY}` → `{student, courses, timetable}`
   with `need75`, `need85`, `skip85` and `cie`/`cieTotal`/`cieMax` per course; `timetable` is null
   when it couldn't be fetched. Validates MCE USNs (`4MC…`) and real dates. Error codes:
-  `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed` 502. `Cache-Control: no-store`.
+  `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed`/`portal_blocked` (portal 403s our
+  IP) 502. `Cache-Control: no-store`.
 - **`api/attendance.go`**: the Vercel Go function; just wraps `pkg/api` with the real client.
 - **`cmd/devserver`**: same handler locally, optional fixture mode.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
@@ -63,11 +69,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - Timetable only shows the current week (no previous/next week).
 - Recoverable-vs-cooked against the real remaining classes (timetable × working days left from the
   calendar) — the data is now fetched, the math isn't wired up.
-- A real login through production hasn't been verified yet: the portal was down at launch, so it's
-  unknown whether it accepts Vercel's Mumbai IPs (a 502 `portal_down` from prod while a local login
-  works would mean it blocks them).
-- Live login is verified only against a fake portal in tests; the real portal hasn't been hit by this
-  code yet.
+- The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
+  through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
+  student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs
+  vars are set for Production only, so previews can't test the proxy.
 
 ## Deploy (Vercel)
 

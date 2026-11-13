@@ -74,12 +74,15 @@ const (
 	CodePortalDown    = "portal_down"
 	CodePortalChanged = "portal_changed"
 	CodeTooManyTries  = "too_many_tries"
+	CodePortalBlocked = "portal_blocked"
 	CodeInternal      = "internal"
-	CodeForbidden     = "portal_blocked"
 )
 
 // Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
 var reUSN = regexp.MustCompile(`^4MC[0-9]{2}[A-Z]{2}[0-9]{3}$`)
+
+// fetchBudget is how long one login may take, all retries included.
+var fetchBudget = 50 * time.Second
 
 // Attendance returns the POST /api/attendance handler.
 func Attendance(f Fetcher) http.HandlerFunc {
@@ -115,7 +118,11 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			return
 		}
 
-		snap, err := f.Fetch(r.Context(), usn, dob)
+		// Finish before Vercel's 60s cap kills us: a cut-off function sends its own
+		// 504 page and never releases the reserved try.
+		ctx, cancel := context.WithTimeout(r.Context(), fetchBudget)
+		snap, err := f.Fetch(ctx, usn, dob)
+		cancel()
 		if errors.Is(err, portal.ErrBadLogin) {
 			// a wrong birthday: the reserved attempt stays counted
 			writeErr(w, http.StatusUnauthorized, CodeBadLogin)
@@ -123,7 +130,7 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 		}
 		lim.done(p, usn, ip, err == nil)
 		if err != nil {
-			log.Printf("fetch Failed: %v", err)
+			log.Printf("fetch failed: %v", err)
 		}
 		switch {
 		case err == nil:
@@ -131,7 +138,8 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			writeErr(w, http.StatusBadGateway, CodePortalDown)
 			return
 		case errors.Is(err, portal.ErrForbidden):
-			writeErr(w, http.StatusForbidden, CodeForbidden)
+			// the portal is blocking our IP: an upstream failure, not the student's
+			writeErr(w, http.StatusBadGateway, CodePortalBlocked)
 			return
 		case errors.Is(err, portal.ErrPortalChanged):
 			writeErr(w, http.StatusBadGateway, CodePortalChanged)

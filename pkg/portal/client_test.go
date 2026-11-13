@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -190,5 +191,64 @@ func TestFetchSessionsDoNotLeak(t *testing.T) {
 	// Same client, wrong DOB: must not ride the previous session's cookies.
 	if _, err := c.Fetch(context.Background(), testUSN, testDOB.AddDate(0, 0, 1)); !errors.Is(err, ErrBadLogin) {
 		t.Fatalf("second fetch err = %v, want ErrBadLogin (session leaked?)", err)
+	}
+}
+
+func TestFetchPostsLoginOnce(t *testing.T) {
+	srv, posts := fakePortal(t, loginFixture(t))
+	if _, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB); err != nil {
+		t.Fatal(err)
+	}
+	if *posts != 1 {
+		t.Fatalf("posted the login %d times, want 1", *posts)
+	}
+}
+
+func TestReadBodyStatuses(t *testing.T) {
+	cases := []struct {
+		status int
+		want   error
+		title  string
+	}{
+		{200, nil, ""},
+		{403, ErrForbidden, `"Access Denied"`},
+		{404, ErrPortalChanged, `"Access Denied"`},
+		{503, ErrPortalDown, ""},
+	}
+	for _, c := range cases {
+		resp := &http.Response{StatusCode: c.status, Body: io.NopCloser(strings.NewReader("<html><title> Access Denied </title>"))}
+		_, err := readBody(resp)
+		if !errors.Is(err, c.want) || (c.want == nil) != (err == nil) {
+			t.Errorf("status %d: err = %v, want %v", c.status, err, c.want)
+		}
+		if c.title != "" && !strings.Contains(err.Error(), c.title) {
+			t.Errorf("status %d: error %q should carry the page title %s", c.status, err, c.title)
+		}
+	}
+}
+
+func TestPageTitle(t *testing.T) {
+	if got := pageTitle([]byte("<HTML><Title lang=en>\n Rock &amp; Roll </Title>")); got != "Rock & Roll" {
+		t.Fatalf("got %q", got)
+	}
+	if got := pageTitle([]byte("no title here")); got != "(no title)" {
+		t.Fatalf("got %q", got)
+	}
+}
+
+// A portal that hangs must not run past the caller's deadline, retries included.
+func TestFetchStopsAtDeadline(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-r.Context().Done()
+	}))
+	defer srv.Close()
+	c := newTestClient(srv.URL)
+	c.Retries, c.Backoff = 5, 10*time.Millisecond
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_, err := c.Fetch(ctx, testUSN, testDOB)
+	if !errors.Is(err, ErrPortalDown) || time.Since(start) > time.Second {
+		t.Fatalf("err = %v after %v, want ErrPortalDown right at the deadline", err, time.Since(start))
 	}
 }

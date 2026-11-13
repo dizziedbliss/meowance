@@ -2,8 +2,6 @@ package portal
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"html"
@@ -15,7 +13,6 @@ import (
 	"os"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -30,12 +27,14 @@ var (
 	ErrPortalDown = errors.New("portal: unreachable")
 	// ErrPortalChanged: the portal answered but its markup isn't what we parse.
 	ErrPortalChanged = errors.New("portal: page layout changed")
-	// ErrForbidden: the portal returned a 403 Forbidden error.
+	// ErrForbidden: the portal (or its firewall) answered 403: it's blocking our IP.
 	ErrForbidden = errors.New("portal: access forbidden")
 )
 
 const maxBody = 5 << 20 // 5 MB; the dashboard is ~60 KB
-const userAgent = "Mozilla/5.0 (Linux; Android10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+
+// A real mobile Chrome. Without browser-like headers the portal 403s us as a bot.
+const userAgent = "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
 var (
 	// Joomla's CSRF token: a hidden input whose name is 32 hex chars and value is 1.
@@ -43,10 +42,9 @@ var (
 	// The login form's own "return" field (the first non-empty one inside #login-form).
 	reLoginForm = regexp.MustCompile(`(?s)<form[^>]+id="login-form".*?</form>`)
 	reReturn    = regexp.MustCompile(`name="return"\s+value="([^"]*)"`)
+	// An error page's <title>, to tell a firewall block from a portal error in logs.
+	reTitle = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 )
-
-// The portal's HTML <title> for fetching errors
-var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 
 // Client logs into the portal and fetches one student's dashboard.
 // It is safe for concurrent use: every Fetch gets its own cookie jar, so one
@@ -54,17 +52,14 @@ var titleRe = regexp.MustCompile(`(?is)<title[^>]*>(.*?)</title>`)
 type Client struct {
 	BaseURL   string
 	Transport http.RoundTripper
-	Timeout   time.Duration
-	Retries   int           // extra attempts after a network failure (not after a bad login)
+	Timeout   time.Duration // per request
+	Retries   int           // extra attempts after a network failure or a 403 (never after a bad login)
 	Backoff   time.Duration // wait between attempts
-
-	//for proxy refreshing and retry with new one
-	mu        sync.Mutex
-	sessionID string
-	expiresAt time.Time
 	// Logf, if set, gets one line per extra page (timetable, calendar): status, size,
 	// what was parsed. Never credentials, never URLs (they carry the session).
 	Logf func(format string, args ...any)
+
+	proxy *proxySession // nil: direct connection
 }
 
 func (c *Client) logf(format string, args ...any) {
@@ -73,79 +68,23 @@ func (c *Client) logf(format string, args ...any) {
 	}
 }
 
-func genrateSessionID() string {
-	b := make([]byte, 8)
-	var sessionID string
-	if _, err := rand.Read(b); err != nil {
-		sessionID = "defaultsessionfallback"
-	} else {
-		sessionID = hex.EncodeToString(b)
-	}
-	return sessionID
-}
-
-func (c *Client) RotateIP() {
-	c.mu.Lock()
-	c.sessionID = genrateSessionID()
-	c.expiresAt = time.Now().Add(5 * time.Minute)
-	c.mu.Unlock()
-}
-
-// NewClient returns a Client for the real portal.
+// NewClient returns a Client for the real portal. With OXYLABS_USERNAME and
+// OXYLABS_PASSWORD set it goes through the residential proxy; without, direct.
 func NewClient() *Client {
-	// Initialize default configuration parameters
-	client := &Client{
-		BaseURL: DefaultBaseURL,
-		Timeout: 25 * time.Second,
-		Retries: 5,
-		Backoff: 1500 * time.Millisecond,
+	c := &Client{BaseURL: DefaultBaseURL, Timeout: 25 * time.Second, Retries: 2, Backoff: 1500 * time.Millisecond}
+	if user, pass := os.Getenv("OXYLABS_USERNAME"), os.Getenv("OXYLABS_PASSWORD"); user != "" && pass != "" {
+		c.useProxy(newProxySession(user, pass, proxyAddr))
 	}
-
-	// 1. Fetch credentials safely from the environment
-	username := os.Getenv("OXYLABS_USERNAME")
-	password := os.Getenv("OXYLABS_PASSWORD")
-
-	if username == "" || password == "" {
-		client.logf("Warning: OXYLABS_USERNAME or OXYLABS_PASSWORD not set. Running without proxy.")
-		client.Transport = http.DefaultTransport
-		return client
-	}
-
-	// 2. Generate a secure, unique session ID for stickines
-	b := make([]byte, 8)
-	var sessionID string
-	if _, err := rand.Read(b); err != nil {
-		sessionID = "defaultsessionfallback"
-	} else {
-		sessionID = hex.EncodeToString(b)
-	}
-
-	const country = "in"
-	const city = "bengaluru"
-	const proxyAddress = "pr.oxylabs.io:7777"
-
-	// 3. Format the authenticated, sticky proxy string
-	proxyAuthStr := fmt.Sprintf("customer-%s-cc-%s-city-%s-sessid-%s", username, country, city, sessionID)
-	proxyUrl, err := url.Parse(fmt.Sprintf("http://%s:%s@%s", proxyAuthStr, password, proxyAddress))
-
-	if err != nil {
-		client.logf("Error parsing proxy URL: %v. Falling back to default transport.", err)
-		client.Transport = http.DefaultTransport
-		return client
-	}
-
-	// 4. Inject the custom proxy transport layer straight into the struct
-	client.Transport = &http.Transport{
-		Proxy: http.ProxyURL(proxyUrl),
-		// Tuning parameters for reliable residential connection handling
-		MaxIdleConns:          10,
-		IdleConnTimeout:       30 * time.Second,
-		TLSHandshakeTimeout:   10 * time.Second,
-		ExpectContinueTimeout: 1 * time.Second,
-	}
-
-	return client
+	return c
 }
+
+func (c *Client) useProxy(p *proxySession) {
+	c.proxy = p
+	c.Transport = p.transport()
+}
+
+// Proxied reports whether requests go through the residential proxy.
+func (c *Client) Proxied() bool { return c.proxy != nil }
 
 // Snapshot is everything one login fetches.
 type Snapshot struct {
@@ -157,12 +96,12 @@ type Snapshot struct {
 	Calendar *Calendar
 }
 
-// Helper function for setting up headers, since without any headers, the website blocks incoming request as marking it as a bot call. This function sets up the headers for the request to the portal.
+// setHeaders makes a request look like the browser the User-Agent claims to be.
+// No Accept-Encoding: Go only decompresses gzip for us when it sets that itself.
 func setHeaders(req *http.Request) {
 	req.Header.Set("User-Agent", userAgent)
 	req.Header.Set("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
-	// req.Header.Set("Accept-Encoding", "gzip, deflate, br")
 	req.Header.Set("Connection", "keep-alive")
 }
 
@@ -178,9 +117,25 @@ func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time) (*Snapsho
 			case <-time.After(c.Backoff):
 			}
 		}
+		actx, session := ctx, ""
+		if c.proxy != nil {
+			session = c.proxy.current()
+			actx = withSession(ctx, session) // one exit IP for this whole attempt
+		}
 		var s *Snapshot
-		s, err = c.fetchOnce(ctx, usn, dob)
-		if !errors.Is(err, ErrPortalDown) {
+		s, err = c.fetchOnce(actx, usn, dob)
+		switch {
+		case errors.Is(err, ErrForbidden):
+			// Only a new exit IP can change a 403. Retrying may log in again, which
+			// is harmless: a wrong birthday comes back as the login page, never a
+			// 403, so it can't be counted twice.
+			if c.proxy == nil {
+				return nil, err
+			}
+			c.logf("portal: 403 on attempt %d/%d, rotating proxy session", attempt+1, c.Retries+1)
+			c.proxy.rotate(session)
+		case errors.Is(err, ErrPortalDown):
+		default:
 			return s, err // success, bad login, or changed markup: retrying won't help
 		}
 	}
@@ -233,40 +188,9 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time) (*Sna
 		return nil, fmt.Errorf("%w: %s", ErrPortalDown, netKind(err))
 	}
 	dashURL := resp.Request.URL.String() // final, signed dashboard URL: the Referer for later pages
-	var body string
-	var lastErr error
-
-	for attempt := 0; attempt <= c.Retries; attempt++ {
-		if attempt > 0 && req.GetBody != nil {
-			newBody, err := req.GetBody()
-			if err != nil {
-				return nil, err
-			}
-			req.Body = newBody
-		}
-		resp, err = hc.Do(req)
-		if err != nil {
-			lastErr = err
-			time.Sleep(c.Backoff)
-			continue
-		}
-
-		body, err = readBody(resp)
-		resp.Body.Close()
-
-		if resp.StatusCode == http.StatusForbidden {
-			c.logf("Got 403 Forbidden (attempt %d/%d). Rotating sessionID...", attempt+1, c.Retries+1) 
-			c.RotateIP()
-			req.Close = true
-			body, err = readBody(resp)
-			lastErr = fmt.Errorf("%w: status %d", ErrForbidden, resp.StatusCode)
-			time.Sleep(c.Backoff)
-			continue
-		}
-		if err != nil {
-			lastErr = err
-			return nil, lastErr
-		}
+	body, err := readBody(resp)
+	if err != nil {
+		return nil, err
 	}
 
 	// 3. Parse. A login page coming back means the portal said no.
@@ -351,8 +275,9 @@ func netKind(err error) string {
 	return "network error"
 }
 
+// pageTitle is an error page's <title>, trimmed, for logs.
 func pageTitle(body []byte) string {
-	m := titleRe.FindSubmatch(body)
+	m := reTitle.FindSubmatch(body)
 	if m == nil {
 		return "(no title)"
 	}
@@ -365,9 +290,7 @@ func pageTitle(body []byte) string {
 
 func readBody(resp *http.Response) (string, error) {
 	defer resp.Body.Close()
-
 	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
-
 	if resp.StatusCode >= 500 {
 		return "", fmt.Errorf("%w: status %d", ErrPortalDown, resp.StatusCode)
 	}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { posts } from "../data/board";
 import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "../lib/api";
+import { portalAsleep } from "../lib/dates";
 import type { Attendance } from "../lib/types";
 import { saveCreds, saveData } from "../lib/vault";
 import { Logo } from "./Logo";
@@ -29,22 +30,7 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
     }
   }
 
-    const now = new Date();
-    const istOffset = 5.5 * 60 * 60 * 1000; // IST is UTC + 5:30
-    const istTime = new Date(now.getTime() + istOffset);
-    const istHour = istTime.getUTCHours();
-    const hour = istHour >= 24 ? istHour - 24 : istHour;
-
-    let message: React.ReactNode;
-
-    if (hour >= 0 && hour < 6) {
-      message = (<div className="mb-6 mt-4 max-w-[66ch] space-y-2 text-[13.5px] border pt-2 pb-2 pl-5 pr-5 border-orange">
-          <em className="not-italic text-orange">NOTICE:</em>
-            <p> Sources (or past experience) say that <em className="not-italic text-orange">after 12AM till somewhere around 6AM</em> MCE needs to sleep, so you can't access your data, nor can <em className="not-italic text-orange">we</em> do, uhmm u can test it tho, ur luck <span className="text-[10px]">(or maybe I'm too lazy to code smth to hide login at this hour)</span>.
-          </p>
-        </div>);
-    }
-  
+  const asleep = portalAsleep();
 
   const field =
     "w-full rounded-none border border-brown-line bg-brown px-4 py-[15px] font-mono text-[17px] tracking-[.04em] text-ink outline-none placeholder:text-[#8a6a4a] focus:border-orange focus:bg-brown-focus";
@@ -72,7 +58,16 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
             the math. you do the bunking.
           </p>
 
-          {message}
+          {asleep && (
+            <div className="mt-4 mb-6 max-w-[66ch] space-y-2 border border-orange px-5 py-2 text-[13.5px]">
+              <em className="not-italic text-orange">NOTICE:</em>
+              <p>
+                Sources (or past experience) say that <em className="not-italic text-orange">after 12AM till somewhere around 6AM</em> MCE
+                needs to sleep, so you can't access your data, nor can <em className="not-italic text-orange">we</em> do, uhmm u can test it
+                tho, ur luck <span className="text-[10px]">(or maybe I'm too lazy to code smth to hide login at this hour)</span>.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={submit} noValidate className="max-w-[560px]">
             <div className="mb-3 grid gap-3 md:grid-cols-[1.2fr_1fr]">
@@ -124,7 +119,7 @@ export function Login({ onIn }: { onIn: (a: Attendance) => void }) {
         <aside aria-label="Community board" className="border-t border-hair-2 pt-[34px] md:border-t-0 md:border-l md:pt-0 md:pl-10">
           <h2 className="font-display text-[40px] font-black leading-[.9] tracking-[-.02em] [font-stretch:80%]">
             Changelogs
-           </h2>
+          </h2>
           <div className="mt-2.5 mb-7 font-mono text-xs text-mut">What happened??</div>
           {posts.map((p, i) => (
             <article key={p.title} className={`post ${i === 0 ? "new" : ""}`}>

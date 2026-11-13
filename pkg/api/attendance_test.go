@@ -126,6 +126,7 @@ func TestAttendanceErrors(t *testing.T) {
 		{"wrong creds", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrBadLogin, 401, CodeBadLogin},
 		{"portal down", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalDown, 502, CodePortalDown},
 		{"portal changed", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalChanged, 502, CodePortalChanged},
+		{"portal blocks us", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrForbidden, 502, CodePortalBlocked},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -144,5 +145,24 @@ func TestAttendanceRejectsGET(t *testing.T) {
 	Attendance(&fakeFetcher{})(rec, httptest.NewRequest(http.MethodGet, "/api/attendance", nil))
 	if rec.Code != http.StatusMethodNotAllowed {
 		t.Fatalf("status %d, want 405", rec.Code)
+	}
+}
+
+// hangingFetcher is a portal that never answers: it waits for the deadline.
+type hangingFetcher struct{}
+
+func (hangingFetcher) Fetch(ctx context.Context, _ string, _ time.Time) (*portal.Snapshot, error) {
+	<-ctx.Done()
+	return nil, portal.ErrPortalDown
+}
+
+func TestAttendanceGivesUpWithinBudget(t *testing.T) {
+	old := fetchBudget
+	fetchBudget = 50 * time.Millisecond
+	t.Cleanup(func() { fetchBudget = old })
+	start := time.Now()
+	rec := post(Attendance(hangingFetcher{}), `{"usn":"4MC00AA001","dob":"15082004"}`)
+	if rec.Code != http.StatusBadGateway || time.Since(start) > time.Second {
+		t.Fatalf("got %d after %v, want a 502 portal_down at the budget", rec.Code, time.Since(start))
 	}
 }

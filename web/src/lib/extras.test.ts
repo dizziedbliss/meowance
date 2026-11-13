@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dayMonth, shortDate } from "./dates";
+import { dayMonth, istHour, portalAsleep, shortDate } from "./dates";
 import { scoreVerdict } from "./scores";
 import { classTag, courseName, niceName, room } from "./week";
 import type { CIEPart, Class, Course } from "./types";
@@ -55,5 +55,19 @@ describe("timetable helpers", () => {
     expect(room("CLASS ROOM")).toBe("classroom");
     expect(dayMonth("02-11-2026")).toBe("2 nov");
     expect(dayMonth("08/11/2026")).toBe("8 nov");
+  });
+});
+
+describe("portal sleep hours (IST)", () => {
+  const at = (iso: string) => new Date(iso);
+  it("reads the hour in india, not the viewer's zone", () => {
+    expect(istHour(at("2026-11-12T18:29:00Z"))).toBe(23); // 11:59pm IST
+    expect(istHour(at("2026-11-12T18:30:00Z"))).toBe(0); // midnight IST, next day
+  });
+  it("is asleep from midnight to 6am IST only", () => {
+    expect(portalAsleep(at("2026-11-12T18:29:00Z"))).toBe(false); // 11:59pm
+    expect(portalAsleep(at("2026-11-12T18:30:00Z"))).toBe(true); // 12:00am
+    expect(portalAsleep(at("2026-11-13T00:29:00Z"))).toBe(true); // 5:59am
+    expect(portalAsleep(at("2026-11-13T00:30:00Z"))).toBe(false); // 6:00am
   });
 });
