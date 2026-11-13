@@ -73,6 +73,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
   student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs
   vars are set for Production only, so previews can't test the proxy.
+
+## Deploy (Vercel)
+
 - **Live:** https://meowance.vercel.app (project `dizziedbliss/meowance`, first deployed 2026-11-09).
   Firewall rule "attendance api limit": 60 requests/min per IP on `/api/attendance`, deny when
   exceeded (college Wi-Fi puts everyone behind one IP, so keep it generous). Previews are behind
