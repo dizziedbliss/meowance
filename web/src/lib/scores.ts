@@ -44,7 +44,9 @@ export function scoreVerdict(c: Course): ScoreVerdict {
 /** One half of the SEE minimum: marks so far, the line, tests still to come. */
 export type SeePart = { got: number; need: number; left: number; status: "done" | "open" | "gone" };
 
-const SENIOR_LAST_BATCH = 23; // the 3 cie + 2 activity scheme; juniors' changed and isn't known yet
+/** The last batch on the handbook's scheme (2024-25: 3 cie + 2 activities, bands, pass marks); later intakes changed it. */
+export const SCHEME_LAST_BATCH = 24;
+export const onHandbookScheme = (usn: string) => Number(usn.slice(3, 5)) <= SCHEME_LAST_BATCH;
 const isCie = (name: string) => /^(se|cie)\s*\d/i.test(name);
 
 function seePart(parts: CIEPart[], need: number, tests: number): SeePart {
@@ -56,12 +58,11 @@ function seePart(parts: CIEPart[], need: number, tests: number): SeePart {
 }
 
 /**
- * The minimum CIE marks to sit the SEE, for the 23 batch and older: 12 of 30
+ * The minimum CIE marks to sit the SEE, for the 24 batch and older: 12 of 30
  * from three cies and 8 of 20 from two activities. Null for juniors.
  */
 export function seeMin(c: Course, usn: string): { cie: SeePart; act: SeePart } | null {
-  const batch = Number(usn.slice(3, 5));
-  if (!(batch <= SENIOR_LAST_BATCH)) return null;
+  if (!onHandbookScheme(usn)) return null;
   const parts = c.cie ?? [];
   return { cie: seePart(parts.filter((p) => isCie(p.name)), 12, 3), act: seePart(parts.filter((p) => !isCie(p.name)), 8, 2) };
 }

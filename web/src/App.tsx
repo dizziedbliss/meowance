@@ -22,7 +22,7 @@ function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView)
   const each = (kind: "history") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
   if (tab === "timetable") return ["timetable"];
   if (tab === "events") return ["calendar"];
-  if (tab === "scores") return scores === "past" ? ["exams"] : [];
+  if (tab === "scores") return scores === "now" ? [] : ["exams"];
   return each("history"); // dated tally boxes; cached until a course's counts change
 }
 
