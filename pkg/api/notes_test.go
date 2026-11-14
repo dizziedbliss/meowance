@@ -188,9 +188,10 @@ func TestNotesFullFlow(t *testing.T) {
 	}
 
 	tokB := r.login(usnB)
-	for i := 0; i < 2; i++ { // a repeat vote is fine, it just doesn't count twice
-		if rec := r.call("POST", "/api/notes", `{"action":"vote","noteId":"`+id+`"}`, tokB, ""); rec.Code != 200 {
-			t.Fatalf("vote = %d %s", rec.Code, rec.Body)
+	for i, want := range []string{`"added":true`, `"added":false`} { // a repeat vote is fine, it just doesn't count twice
+		rec := r.call("POST", "/api/notes", `{"action":"vote","noteId":"`+id+`"}`, tokB, "")
+		if rec.Code != 200 || !strings.Contains(rec.Body.String(), want) {
+			t.Fatalf("vote %d = %d %s, want %s so the screen knows if it counted", i+1, rec.Code, rec.Body, want)
 		}
 	}
 	rec = r.call("GET", "/api/notes?code=23AI501", "", "", "")
@@ -300,7 +301,7 @@ func TestReportNotifierEmailsMaxTheDetails(t *testing.T) {
 	if err != nil || len(m.sent) != 1 {
 		t.Fatalf("sent %v, %v", m.sent, err)
 	}
-	for _, want := range []string{usnB, "abc", "Unit 3", "23AI501", "textbook"} {
+	for _, want := range []string{usnB, "abc", "Unit 3", "23AI501", "textbook", "notesadmin remove abc"} {
 		if !strings.Contains(m.sent[0], want) {
 			t.Errorf("report email %q is missing %q", m.sent[0], want)
 		}

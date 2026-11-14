@@ -59,6 +59,8 @@ func (r *memRepo) Get(_ context.Context, id string) (Note, error) {
 	return c, nil
 }
 func (r *memRepo) SetLive(_ context.Context, id, key string, size int64, mime string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	n, ok := r.notes[id]
 	if !ok || n.Status != "pending" {
 		return ErrNotFound
@@ -75,6 +77,8 @@ func (r *memRepo) Delete(_ context.Context, id string) error {
 	return nil
 }
 func (r *memRepo) ListLive(_ context.Context, code string) ([]Note, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	var out []Note
 	for id, n := range r.notes {
 		if n.Status == "live" && n.Code == code {
@@ -87,6 +91,8 @@ func (r *memRepo) ListLive(_ context.Context, code string) ([]Note, error) {
 	return out, nil
 }
 func (r *memRepo) Vote(_ context.Context, id, usn string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.votes[id] == nil {
 		r.votes[id] = map[string]bool{}
 	}
@@ -96,7 +102,15 @@ func (r *memRepo) Vote(_ context.Context, id, usn string) (bool, error) {
 	r.votes[id][usn] = true
 	return true, nil
 }
+func (r *memRepo) RemoveReport(_ context.Context, id, usn string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.reports[id], usn)
+	return nil
+}
 func (r *memRepo) Report(_ context.Context, id, usn, reason string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if r.reports[id] == nil {
 		r.reports[id] = map[string]string{}
 	}

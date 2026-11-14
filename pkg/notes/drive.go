@@ -220,7 +220,7 @@ func (d *Drive) folder(ctx context.Context, u Upload) (string, error) {
 
 func (d *Drive) findOrMake(ctx context.Context, name, parent string) (string, error) {
 	q := fmt.Sprintf("name='%s' and mimeType='%s' and '%s' in parents and trashed=false", name, folderMIME, parent)
-	resp, err := d.do(ctx, "GET", d.apiBase+"/drive/v3/files?pageSize=1&spaces=drive&fields="+url.QueryEscape("files(id)")+"&q="+url.QueryEscape(q), nil, nil)
+	resp, err := d.do(ctx, "GET", d.apiBase+"/drive/v3/files?pageSize=1&orderBy=createdTime&spaces=drive&fields="+url.QueryEscape("files(id)")+"&q="+url.QueryEscape(q), nil, nil)
 	if err != nil {
 		return "", err
 	}

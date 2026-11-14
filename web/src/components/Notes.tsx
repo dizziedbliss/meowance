@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { isoDayMonth } from "../lib/dates";
+import { isoDayMonth, todayISO } from "../lib/dates";
 import {
   type Note,
   listNotes,
@@ -19,6 +19,8 @@ import { AddNote } from "./AddNote";
 import { field } from "./field";
 import { SubTabs } from "./SubTabs";
 
+/** The day a note went up, in the viewer's own timezone (a UTC date would show 00:00-05:30 IST as yesterday). */
+const day = (iso: string) => isoDayMonth(todayISO(new Date(iso))).toLowerCase();
 const kind = (mime: string) => (mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : "jpg");
 const failure = (x: unknown) => notesErrorCopy[x instanceof NotesError ? x.code : "internal"];
 
@@ -59,8 +61,10 @@ export function Notes({ data }: { data: Attendance }) {
     setVoted((v) => new Set(v).add(n.id));
     setList((l) => l && l.map((x) => (x.id === n.id ? { ...x, votes: x.votes + 1 } : x)));
     try {
-      await vote(n.id);
+      const counted = await vote(n.id);
       rememberVote(n.id);
+      // a vote from an earlier login (the list was wiped with logout) doesn't count twice: undo our +1
+      if (!counted) setList((l) => l && l.map((y) => (y.id === n.id ? { ...y, votes: y.votes - 1 } : y)));
     } catch (x) {
       setVoted((v) => {
         const c = new Set(v);
@@ -154,7 +158,7 @@ export function Notes({ data }: { data: Attendance }) {
                 {n.title}
               </a>
               <div className="mt-1 font-mono text-xs text-mut">
-                {n.label} · {kind(n.mime)} {sizeLabel(n.size)} · {isoDayMonth(n.created.slice(0, 10)).toLowerCase()}
+                {n.label} · {kind(n.mime)} {sizeLabel(n.size)} · {day(n.created)}
               </div>
             </div>
             <div className="flex items-start gap-4 font-mono text-xs">

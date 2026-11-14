@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -31,6 +32,7 @@ type fakeDrive struct {
 type fakeFile struct {
 	ID, Name, MIME, Parent string
 	Size                   string
+	Seq                    int // creation order
 }
 
 func newFake(t *testing.T) (*fakeDrive, *Drive) {
@@ -69,11 +71,23 @@ func (f *fakeDrive) serve(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query().Get("q")
 		name, parent := qName.FindStringSubmatch(q)[1], qParent.FindStringSubmatch(q)[1]
 		wantFolder := strings.Contains(q, folderMIME)
-		out := []map[string]string{}
+		var hits []*fakeFile
 		for _, fl := range f.files {
 			if (fl.MIME == folderMIME) == wantFolder && fl.Name == name && fl.Parent == parent {
-				out = append(out, map[string]string{"id": fl.ID})
+				hits = append(hits, fl)
 			}
+		}
+		// like Drive: without orderBy the order is unspecified, so be adversarial and newest-first
+		oldestFirst := r.URL.Query().Get("orderBy") == "createdTime"
+		sort.Slice(hits, func(i, j int) bool {
+			if oldestFirst {
+				return hits[i].Seq < hits[j].Seq
+			}
+			return hits[i].Seq > hits[j].Seq
+		})
+		out := []map[string]string{}
+		for _, fl := range hits {
+			out = append(out, map[string]string{"id": fl.ID})
 		}
 		json.NewEncoder(w).Encode(map[string]any{"files": out})
 	case r.Method == "POST" && p == "/drive/v3/files": // folder create
@@ -90,7 +104,7 @@ func (f *fakeDrive) serve(w http.ResponseWriter, r *http.Request) {
 		f.next++
 		f.creates++
 		id := fmt.Sprintf("folder%d", f.next)
-		f.files[id] = &fakeFile{ID: id, Name: m.Name, MIME: m.MIME, Parent: parent}
+		f.files[id] = &fakeFile{ID: id, Name: m.Name, MIME: m.MIME, Parent: parent, Seq: f.next}
 		json.NewEncoder(w).Encode(map[string]string{"id": id})
 	case r.Method == "POST" && p == "/upload/drive/v3/files": // resumable session
 		f.lastInit = r.Header.Clone()
@@ -164,6 +178,38 @@ func TestNewUploadMakesTheFoldersOnceAndOpensASession(t *testing.T) {
 	}
 	if f.creates != 3 {
 		t.Errorf("second upload made folders again: %d", f.creates)
+	}
+}
+
+func TestTwoColdInstancesPickTheSameCourseFolder(t *testing.T) {
+	f, d := newFake(t)
+	// both instances raced and each made the course folder: Drive now has two of them
+	parent, err := d.folder(context.Background(), up())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var courseFolder *fakeFile
+	f.mu.Lock()
+	for _, fl := range f.files {
+		if fl.ID == parent {
+			courseFolder = fl
+		}
+	}
+	f.next++
+	dup := &fakeFile{ID: fmt.Sprintf("folder%d", f.next), Name: courseFolder.Name, MIME: folderMIME, Parent: courseFolder.Parent, Seq: f.next}
+	f.files[dup.ID] = dup
+	f.mu.Unlock()
+
+	for i := 0; i < 2; i++ { // two cold instances, each with an empty folder cache
+		cold := NewDrive(DriveConfig{ClientID: "id", ClientSecret: "secret", RefreshToken: "refresh"})
+		cold.tokenURL, cold.apiBase, cold.uploadBase = d.tokenURL, d.apiBase, d.uploadBase
+		got, err := cold.folder(context.Background(), up())
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got != parent {
+			t.Errorf("instance %d chose folder %s, want the oldest (%s): init and commit could disagree", i, got, parent)
+		}
 	}
 }
 

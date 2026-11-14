@@ -140,6 +140,23 @@ func repoContract(t *testing.T, mk func(t *testing.T) Repo) {
 		}
 	})
 
+	t.Run("a report can be taken back so it can be sent again", func(t *testing.T) {
+		r := mk(t)
+		r.CreateWithin(ctx, note("t1", "U1", "C1", base), day, 5)
+		if added, _ := r.Report(ctx, "t1", "A", "why"); !added {
+			t.Fatal("first report not added")
+		}
+		if err := r.RemoveReport(ctx, "t1", "A"); err != nil {
+			t.Fatal(err)
+		}
+		if added, _ := r.Report(ctx, "t1", "A", "why"); !added {
+			t.Error("a report that was taken back should count as new")
+		}
+		if err := r.RemoveReport(ctx, "t1", "nobody"); err != nil {
+			t.Errorf("removing a report that isn't there = %v, want nil", err)
+		}
+	})
+
 	t.Run("delete removes the note and its votes", func(t *testing.T) {
 		r := mk(t)
 		r.CreateWithin(ctx, note("d1", "U1", "C1", base), day, 5)
@@ -159,4 +176,24 @@ func repoContract(t *testing.T, mk func(t *testing.T) Repo) {
 
 func TestMemRepoContract(t *testing.T) {
 	repoContract(t, func(*testing.T) Repo { return newMemRepo() })
+}
+
+func TestMemRepoSurvivesParallelRequests(t *testing.T) {
+	r := newMemRepo()
+	ctx := context.Background()
+	r.CreateWithin(ctx, note("p1", "U1", "C1", base), base.Add(-time.Hour), 100)
+	r.SetLive(ctx, "p1", "k", 1, "application/pdf")
+	var wg sync.WaitGroup
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			r.Vote(ctx, "p1", fmt.Sprint("V", i))
+			r.Report(ctx, "p1", fmt.Sprint("V", i), "x")
+			r.ListLive(ctx, "C1")
+			r.CreateWithin(ctx, note(fmt.Sprint("q", i), fmt.Sprint("U", i), "C1", base), base.Add(-time.Hour), 100)
+			r.SetLive(ctx, fmt.Sprint("q", i), "k", 1, "application/pdf")
+		}(i)
+	}
+	wg.Wait() // -race (and a map write crash) would flag any unlocked access
 }

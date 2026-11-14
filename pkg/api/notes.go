@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -29,11 +28,9 @@ func ReportNotifier(m Mailer) func(context.Context, notes.ReportInfo) error {
 		return nil
 	}
 	return func(ctx context.Context, r notes.ReportInfo) error {
-		return m.Send(ctx, r.Reporter, fmt.Sprintf("REPORTED NOTE %s (%q, course %s): %s", r.NoteID, r.Title, r.Code, r.Reason))
+		return m.Send(ctx, r.Reporter, fmt.Sprintf("REPORTED NOTE %s (%q, course %s): %s\n\nto take it down: go run ./cmd/notesadmin remove %s", r.NoteID, r.Title, r.Code, r.Reason, r.NoteID))
 	}
 }
-
-var reNotesCode = regexp.MustCompile(`^[A-Za-z0-9]{3,12}$`)
 
 // notesReq is the POST body; the fields each action reads are noted in notesWrite.
 type notesReq struct {
@@ -89,7 +86,7 @@ func notesRead(w http.ResponseWriter, r *http.Request, d *NotesDeps) {
 	q := r.URL.Query()
 	switch {
 	case q.Get("code") != "":
-		if !reNotesCode.MatchString(q.Get("code")) {
+		if !notes.ValidCode(q.Get("code")) {
 			writeErr(w, http.StatusBadRequest, CodeBadInput)
 			return
 		}
@@ -177,11 +174,12 @@ func notesWrite(w http.ResponseWriter, r *http.Request, d *NotesDeps, lim *limit
 		}
 		writeJSON(w, map[string]any{"note": notes.ViewOf(n)})
 	case "vote": // noteId
-		if err := d.Svc.Vote(ctx, usn, req.NoteID); err != nil {
+		counted, err := d.Svc.Vote(ctx, usn, req.NoteID)
+		if err != nil {
 			notesErr(w, err)
 			return
 		}
-		writeJSON(w, map[string]bool{"ok": true})
+		writeJSON(w, map[string]bool{"ok": true, "added": counted}) // added is false for a repeat vote
 	case "report": // noteId, reason
 		if err := d.Svc.Report(ctx, usn, req.NoteID, req.Reason); err != nil {
 			notesErr(w, err)

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"regexp"
 	"strings"
 	"time"
@@ -25,6 +26,9 @@ var (
 )
 
 var courseCode = regexp.MustCompile(`^[A-Z0-9]{3,12}$`)
+
+// ValidCode reports whether s is a course code the notes accept (any branch or sem, any case).
+func ValidCode(s string) bool { return courseCode.MatchString(strings.ToUpper(strings.TrimSpace(s))) }
 
 // Note is one row of notes sharing. Uploader is the USN and never leaves the server.
 type Note struct {
@@ -51,6 +55,8 @@ type Repo interface {
 	ListLive(ctx context.Context, code string) ([]Note, error) // newest first; Votes filled
 	Vote(ctx context.Context, id, usn string) (added bool, err error)
 	Report(ctx context.Context, id, usn, reason string) (added bool, err error)
+	// RemoveReport takes a report back (its email never went out), so a retry counts as new.
+	RemoveReport(ctx context.Context, id, usn string) error
 }
 
 // ReportInfo is what Max is told when a student reports a note.
@@ -143,8 +149,12 @@ func (s *Service) Init(ctx context.Context, usn string, in InitInput) (InitResul
 	}
 	session, err := s.Store.NewUpload(ctx, up)
 	if err != nil {
-		// our side failed, not the student's: give the slot back
-		s.Repo.Delete(ctx, id)
+		// our side failed, not the student's: give the slot back, even if this request ran out of time
+		cctx, done := cleanup(ctx)
+		defer done()
+		if derr := s.Repo.Delete(cctx, id); derr != nil {
+			log.Printf("notes: could not give back the slot of %s: %v", id, derr)
+		}
 		return InitResult{}, err
 	}
 	return InitResult{NoteID: id, Session: session}, nil
@@ -169,8 +179,14 @@ func (s *Service) Commit(ctx context.Context, usn, id, key string) (Note, error)
 		if errors.Is(err, ErrRejected) {
 			// a bad upload keeps its slot (so retries can't dodge the daily limit) and its
 			// stray file goes; the key the client sent is never deleted, it may not be theirs
-			s.Store.Discard(ctx, up)
-			s.Repo.Reject(ctx, id)
+			cctx, done := cleanup(ctx)
+			defer done()
+			if derr := s.Store.Discard(cctx, up); derr != nil {
+				log.Printf("notes: stray file of %s left in the store: %v", id, derr)
+			}
+			if rerr := s.Repo.Reject(cctx, id); rerr != nil {
+				log.Printf("notes: could not mark %s rejected: %v", id, rerr)
+			}
 		}
 		return Note{}, err
 	}
@@ -193,13 +209,12 @@ func (s *Service) List(ctx context.Context, code string) ([]View, error) {
 	return out, nil
 }
 
-// Vote adds one upvote per student per live note.
-func (s *Service) Vote(ctx context.Context, usn, id string) error {
+// Vote adds one upvote per student per live note; counted is false for a repeat vote.
+func (s *Service) Vote(ctx context.Context, usn, id string) (counted bool, err error) {
 	if _, err := s.live(ctx, id); err != nil {
-		return err
+		return false, err
 	}
-	_, err := s.Repo.Vote(ctx, id, usn)
-	return err
+	return s.Repo.Vote(ctx, id, usn)
 }
 
 // Report tells Max about a note, once per student.
@@ -216,7 +231,24 @@ func (s *Service) Report(ctx context.Context, usn, id, reason string) error {
 	if err != nil || !added || s.Notify == nil {
 		return err
 	}
-	return s.Notify(ctx, ReportInfo{NoteID: id, Title: n.Title, Code: n.Code, Reason: reason, Reporter: usn})
+	// The email is the only way Max hears about a report. If it didn't go out, forget the
+	// report, so the student's retry sends it again instead of being swallowed as a repeat.
+	if err := s.Notify(ctx, ReportInfo{NoteID: id, Title: n.Title, Code: n.Code, Reason: reason, Reporter: usn}); err != nil {
+		log.Printf("notes: report email for %s failed: %v", id, err)
+		cctx, done := cleanup(ctx)
+		defer done()
+		if rerr := s.Repo.RemoveReport(cctx, id, usn); rerr != nil {
+			log.Printf("notes: could not take back the report on %s: %v", id, rerr)
+		}
+		return err
+	}
+	return nil
+}
+
+// cleanup is a context for undoing a half-done step: it outlives a cancelled or timed-out
+// request (which is often why we are cleaning up) but not for long.
+func cleanup(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 }
 
 // FileLink is where a student is sent to open a live note's file.

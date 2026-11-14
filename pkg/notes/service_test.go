@@ -12,6 +12,8 @@ import (
 
 // fakeStore records what the service asks of a Store.
 type fakeStore struct {
+	onNew     func() // runs inside NewUpload/Finish before they answer, e.g. to cancel the request
+	onFinish  func()
 	mu        sync.Mutex
 	discarded []Upload
 	opened    []Upload
@@ -22,6 +24,9 @@ type fakeStore struct {
 }
 
 func (s *fakeStore) NewUpload(_ context.Context, u Upload) (string, error) {
+	if s.onNew != nil {
+		s.onNew()
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.newErr != nil {
@@ -32,6 +37,9 @@ func (s *fakeStore) NewUpload(_ context.Context, u Upload) (string, error) {
 }
 func (s *fakeStore) Finish(_ context.Context, u Upload, key string) (Stored, error) {
 	s.finish = append(s.finish, u)
+	if s.onFinish != nil {
+		s.onFinish()
+	}
 	if s.finErr != nil {
 		return Stored{}, s.finErr
 	}
@@ -280,20 +288,26 @@ func TestListShowsLiveNotesOfACourseWithLabelsNotNames(t *testing.T) {
 func TestVoteCountsOncePerStudent(t *testing.T) {
 	h := newHarness()
 	id := h.goLive(t, usn)
+	var added []bool
 	for _, who := range []string{"4MC23AI002", "4MC23AI002", "4MC23CS003"} {
-		if err := h.svc.Vote(context.Background(), who, id); err != nil {
+		a, err := h.svc.Vote(context.Background(), who, id)
+		if err != nil {
 			t.Fatal(err)
 		}
+		added = append(added, a)
+	}
+	if fmt.Sprint(added) != "[true false true]" {
+		t.Errorf("Vote reported counted = %v, want [true false true] so the screen can tell a repeat", added)
 	}
 	got, _ := h.svc.List(context.Background(), "23AI501")
 	if got[0].Votes != 2 {
 		t.Errorf("votes = %d, want 2 (a repeat vote doesn't count)", got[0].Votes)
 	}
-	if err := h.svc.Vote(context.Background(), usn, "nope"); !errors.Is(err, ErrNotFound) {
+	if _, err := h.svc.Vote(context.Background(), usn, "nope"); !errors.Is(err, ErrNotFound) {
 		t.Errorf("vote on a missing note: %v", err)
 	}
 	r, _ := h.svc.Init(context.Background(), usn, in())
-	if err := h.svc.Vote(context.Background(), usn, r.NoteID); !errors.Is(err, ErrNotFound) {
+	if _, err := h.svc.Vote(context.Background(), usn, r.NoteID); !errors.Is(err, ErrNotFound) {
 		t.Errorf("vote on a pending note: %v, want ErrNotFound", err)
 	}
 }
@@ -348,5 +362,85 @@ func TestRemoveDeletesTheFileAndTheRow(t *testing.T) {
 	}
 	if err := h.svc.Remove(context.Background(), id); !errors.Is(err, ErrNotFound) {
 		t.Errorf("removing twice: %v, want ErrNotFound", err)
+	}
+}
+
+func TestReportIsRetriedWhenTheEmailFails(t *testing.T) {
+	h := newHarness()
+	id := h.goLive(t, usn)
+	sendErr := errors.New("resend is down")
+	h.svc.Notify = func(context.Context, ReportInfo) error { return sendErr }
+	if err := h.svc.Report(context.Background(), "4MC23AI002", id, "textbook"); !errors.Is(err, sendErr) {
+		t.Fatalf("a failed email was hidden: %v", err)
+	}
+	// the student tries again once the mail works: Max must get it this time
+	h.svc.Notify = func(_ context.Context, r ReportInfo) error { h.reported = append(h.reported, r); return nil }
+	if err := h.svc.Report(context.Background(), "4MC23AI002", id, "textbook"); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.reported) != 1 {
+		t.Errorf("Max was emailed %d times, want exactly 1 (the lost one must be re-sent)", len(h.reported))
+	}
+}
+
+// strictRepo fails Delete and Reject on a cancelled context, like a real database would.
+type strictRepo struct{ Repo }
+
+func (r strictRepo) Delete(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return r.Repo.Delete(ctx, id)
+}
+func (r strictRepo) Reject(ctx context.Context, id string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return r.Repo.Reject(ctx, id)
+}
+
+func TestCleanupStillRunsWhenTheRequestIsCancelled(t *testing.T) {
+	t.Run("a failed upload session gives its slot back", func(t *testing.T) {
+		h := newHarness()
+		h.svc.Repo = strictRepo{h.repo}
+		ctx, cancel := context.WithCancel(context.Background())
+		h.store.onNew = cancel // the request runs out of time inside the store call
+		h.store.newErr = context.Canceled
+		if _, err := h.svc.Init(ctx, usn, in()); err == nil {
+			t.Fatal("expected an error")
+		}
+		if len(h.repo.notes) != 0 {
+			t.Errorf("the pending note stayed (%d rows): the student lost a daily slot to our failure", len(h.repo.notes))
+		}
+	})
+	t.Run("a rejected upload is still discarded and marked", func(t *testing.T) {
+		h := newHarness()
+		r, _ := h.svc.Init(context.Background(), usn, in())
+		h.svc.Repo = strictRepo{h.repo}
+		ctx, cancel := context.WithCancel(context.Background())
+		h.store.onFinish = cancel
+		h.store.finErr = ErrRejected
+		if _, err := h.svc.Commit(ctx, usn, r.NoteID, "k"); !errors.Is(err, ErrRejected) {
+			t.Fatalf("err = %v", err)
+		}
+		if n := h.repo.notes[r.NoteID]; n == nil || n.Status != "rejected" {
+			t.Errorf("note = %+v, want it marked rejected so it keeps counting", n)
+		}
+		if len(h.store.discarded) != 1 {
+			t.Errorf("discarded = %v: the stray file would stay in Drive", h.store.discarded)
+		}
+	})
+}
+
+func TestValidCode(t *testing.T) {
+	for _, ok := range []string{"23AI501", "23ai501", " 23AI704D ", "23OEEC71"} {
+		if !ValidCode(ok) {
+			t.Errorf("%q should be a course code", ok)
+		}
+	}
+	for _, bad := range []string{"", "ab", "23 AI501", "23AI501;", "x' or 'a'='a", "1234567890123"} {
+		if ValidCode(bad) {
+			t.Errorf("%q should not be a course code", bad)
+		}
 	}
 }

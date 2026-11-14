@@ -147,8 +147,9 @@ export async function listNotes(code: string): Promise<Note[]> {
 /** Where a note's file opens (the server redirects to wherever it's stored). */
 export const noteFileUrl = (id: string) => `/api/notes?file=${encodeURIComponent(id)}`;
 
-export function vote(id: string): Promise<void> {
-  return withToken((t) => post<unknown>({ action: "vote", noteId: id }, t)).then(() => undefined);
+/** Upvotes a note. Resolves to whether it counted: false when this student had already voted. */
+export function vote(id: string): Promise<boolean> {
+  return withToken((t) => post<{ added: boolean }>({ action: "vote", noteId: id }, t)).then((r) => r.added);
 }
 
 export function report(id: string, reason: string): Promise<void> {

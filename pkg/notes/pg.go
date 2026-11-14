@@ -142,6 +142,11 @@ func (p *PG) Vote(ctx context.Context, id, usn string) (bool, error) {
 	return tag.RowsAffected() == 1, err
 }
 
+func (p *PG) RemoveReport(ctx context.Context, id, usn string) error {
+	_, err := p.pool.Exec(ctx, `delete from reports where note_id = $1 and usn = $2`, id, usn)
+	return err
+}
+
 func (p *PG) Report(ctx context.Context, id, usn, reason string) (bool, error) {
 	tag, err := p.pool.Exec(ctx, `insert into reports (note_id, usn, reason) values ($1, $2, $3) on conflict do nothing`, id, usn, reason)
 	return tag.RowsAffected() == 1, err

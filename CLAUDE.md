@@ -65,6 +65,11 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   automatically). A note is `pending` until the store confirms the upload, then `live`; 5 notes a day per USN,
   enforced atomically in the repo. Notes show a random funny label, never the USN. Reports email Max.
   The Postgres test (`NOTES_LIVE_DB=1`) runs in a throwaway schema and refuses if it isn't in it.
+  Env on Vercel (Production): `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`, `NOTES_TOKEN_SECRET`, `DATABASE_URL`
+  (Neon, pooled), optional `NOTES_ORIGINS` (extra comma-separated page origins allowed to upload; the prod URL
+  is built in). Takedown: reports email Max the note id; `go run ./cmd/notesadmin remove <id>` (needs
+  `DATABASE_URL` and the `GOOGLE_*` vars in the shell) deletes the file and the row. Course folders are found
+  by name and the oldest wins (`orderBy=createdTime`), so two cold instances racing to make one agree.
 - **`cmd/devserver`**: same handler locally, optional fixture mode; notes run fully in memory there.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
@@ -145,3 +150,6 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - When its table is full of live counts (100k keys in 15 min) the guard fails closed: new USNs get
   429 for up to a minute. Deliberate: fail-open was a bypass. Full sweeps are throttled to one per 10s.
 - Login is only as safe as MCE's (USN + birthday).
+- Notes need the Google OAuth app published ("In production"): in "Testing" mode Google expires the refresh
+  token after 7 days and every notes call would answer 502 `storage_error`.
+- A report is just an email; reported notes stay listed until Max runs `notesadmin remove`.

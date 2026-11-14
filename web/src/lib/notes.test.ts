@@ -132,6 +132,13 @@ describe("api calls", () => {
     expect(loadToken(store, Date.now())).toBe("fresh");
   });
 
+  it("vote says whether it counted, so a repeat vote doesn't inflate the number", async () => {
+    saveToken(store, "tok", 7 * 86400, Date.now());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(200, { ok: true, added: true })).mockResolvedValueOnce(json(200, { ok: true, added: false })));
+    expect(await vote("note1")).toBe(true);
+    expect(await vote("note1")).toBe(false);
+  });
+
   it("a fresh token the server still refuses is an error, not a loop", async () => {
     vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => (JSON.parse(String(init?.body)).action === "login" ? json(200, { token: "t", expiresIn: 604800 }) : json(401, { error: "bad_token" }))));
     await expect(vote("note1")).rejects.toMatchObject({ code: "bad_token" });
