@@ -81,6 +81,8 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   avatar, and invented counts, class dates, CIE marks, exam dates, grades, section). Scrubbing names
   isn't enough; never commit real student data or HARs. Verify by parsing old vs new values.
 - Go: stdlib-first. Web: exact-pinned deps, `npm ci`.
+- `web/public/privacy/` and `terms/` are static pages (linked from the Google OAuth consent screen). When the
+  app starts storing or sending something new about students, update `privacy/` in the same PR.
 
 ## Not built yet
 
