@@ -1,11 +1,11 @@
-export type Tab = "timetable" | "scores" | "events";
+export type Tab = "timetable" | "scores" | "events" | "notes";
 
-const tabs: Tab[] = ["timetable", "scores", "events"];
+const tabs: Tab[] = ["timetable", "scores", "events", "notes"];
 
 /** Floating over the page with no bar of its own: labels split by hairlines over the dark fade (body.has-nav). */
 export function BottomNav({ active, onTab, onLogout }: { active: Tab | null; onTab: (t: Tab) => void; onLogout: () => void }) {
   const btn =
-    "whitespace-nowrap px-3.5 py-2 text-[15px] font-medium underline-offset-[7px] decoration-2 transition-colors md:px-6 md:text-base";
+    "whitespace-nowrap px-2.5 py-2 text-[15px] font-medium underline-offset-[7px] decoration-2 transition-colors sm:px-3.5 md:px-6 md:text-base";
   return (
     <nav
       aria-label="Sections"

@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/dizziedbliss/meowance/pkg/api"
+	"github.com/dizziedbliss/meowance/pkg/notes"
 	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
@@ -112,6 +113,19 @@ func main() {
 		mail = m
 	}
 	mux.Handle("/api/feedback", api.Feedback(mail))
+	// notes: all in memory (no Drive, no database), so the screens can be tried offline.
+	// Files vanish when the dev server stops. The store's links are relative, so they go through Vite's /api proxy.
+	store := notes.NewMemStore("")
+	store.Delay = 2 * time.Second // feel like a real upload
+	store.Routes(mux)
+	signer, _ := notes.NewSigner("dev-only-secret-dev-only-secret-0")
+	devNotes := &api.NotesDeps{
+		Svc:     &notes.Service{Repo: notes.NewMemRepo(), Store: store, Notify: api.ReportNotifier(mail)},
+		Signer:  signer,
+		Portal:  f,
+		Origins: []string{"http://localhost:5180", "http://127.0.0.1:5180", "http://localhost:5181", "http://127.0.0.1:5181"},
+	}
+	mux.Handle("/api/notes", api.Notes(func() (*api.NotesDeps, error) { return devNotes, nil }))
 	log.Printf("listening on http://%s", *addr)
 	log.Fatal(http.ListenAndServe(*addr, mux))
 }

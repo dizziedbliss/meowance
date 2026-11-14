@@ -18,6 +18,7 @@ import (
 
 	"github.com/dizziedbliss/meowance/pkg/attend"
 	"github.com/dizziedbliss/meowance/pkg/portal"
+	usnfmt "github.com/dizziedbliss/meowance/pkg/usn"
 )
 
 // Fetcher is what the handler needs from the portal (a real *portal.Client, or a fixture in dev).
@@ -89,10 +90,16 @@ const (
 	CodeTooManyTries  = "too_many_tries"
 	CodePortalBlocked = "portal_blocked"
 	CodeInternal      = "internal"
-)
 
-// Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
-var reUSN = regexp.MustCompile(`^4MC[0-9]{2}[A-Z]{2}[0-9]{3}$`)
+	// notes sharing
+	CodeBadToken       = "bad_token"
+	CodeNotFound       = "not_found"
+	CodeForbidden      = "forbidden"
+	CodeRejected       = "rejected"
+	CodeTooManyUploads = "too_many_uploads"
+	CodeNotesOff       = "notes_off"
+	CodeStorage        = "storage_error"
+)
 
 // A course code as the portal prints it (23AI701, 23OEEC71, 23AI704D).
 var reCourseCode = regexp.MustCompile(`^[0-9]{2}[A-Z0-9]{2,10}$`)
@@ -134,49 +141,68 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			return
 		}
 
-		// Reserve this attempt before asking the portal. Out of tries for this
-		// USN (from this IP, or overall): refuse without contacting the portal.
-		ip := clientIP(r)
-		p, ok, wait := lim.begin(usn, ip)
-		if !ok {
-			w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())+1))
-			writeErr(w, http.StatusTooManyRequests, CodeTooManyTries)
+		snap, fail := portalLogin(r, f, lim, usn, dob, want)
+		if fail != nil {
+			fail.write(w)
 			return
 		}
 
-		// Finish before Vercel's 60s cap kills us: a cut-off function sends its own
-		// 504 page and never releases the reserved try.
-		ctx, cancel := context.WithTimeout(r.Context(), fetchBudget)
-		snap, err := f.Fetch(ctx, usn, dob, want)
-		cancel()
-		if errors.Is(err, portal.ErrBadLogin) {
-			// a wrong birthday: the reserved attempt stays counted
-			writeErr(w, http.StatusUnauthorized, CodeBadLogin)
-			return
-		}
-		lim.done(p, usn, ip, err == nil)
-		if err != nil {
-			log.Printf("fetch failed: %v", err)
-		}
-		switch {
-		case err == nil:
-		case errors.Is(err, portal.ErrPortalDown):
-			writeErr(w, http.StatusBadGateway, CodePortalDown)
-			return
-		case errors.Is(err, portal.ErrForbidden):
-			// the portal is blocking our IP: an upstream failure, not the student's
-			writeErr(w, http.StatusBadGateway, CodePortalBlocked)
-			return
-		case errors.Is(err, portal.ErrPortalChanged):
-			writeErr(w, http.StatusBadGateway, CodePortalChanged)
-			return
-		default:
-			writeErr(w, http.StatusInternalServerError, CodeInternal)
-			return
-		}
+		writeJSON(w, Build(snap, usn))
+	}
+}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(Build(snap, usn))
+// loginFail is what to send back when a guarded portal login didn't work out.
+type loginFail struct {
+	status     int
+	code       string
+	retryAfter int // seconds, only for too_many_tries
+}
+
+func (f *loginFail) write(w http.ResponseWriter) {
+	if f.retryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(f.retryAfter))
+	}
+	writeErr(w, f.status, f.code)
+}
+
+// portalLogin logs a student in to the portal behind the brute-force guard. The attendance
+// and notes endpoints both use it (same rules), but they are separate Vercel functions, so each
+// warm instance of each keeps its own in-memory counts: a speed bump, not a shared budget.
+// The Vercel firewall's per-IP rate limit on both paths is the cross-instance limit.
+func portalLogin(r *http.Request, f Fetcher, lim *limiter, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, *loginFail) {
+	// Reserve this attempt before asking the portal. Out of tries for this
+	// USN (from this IP, or overall): refuse without contacting the portal.
+	ip := clientIP(r)
+	p, ok, wait := lim.begin(usn, ip)
+	if !ok {
+		return nil, &loginFail{http.StatusTooManyRequests, CodeTooManyTries, int(wait.Seconds()) + 1}
+	}
+
+	// Finish before Vercel's 60s cap kills us: a cut-off function sends its own
+	// 504 page and never releases the reserved try.
+	ctx, cancel := context.WithTimeout(r.Context(), fetchBudget)
+	snap, err := f.Fetch(ctx, usn, dob, want)
+	cancel()
+	if errors.Is(err, portal.ErrBadLogin) {
+		// a wrong birthday: the reserved attempt stays counted
+		return nil, &loginFail{http.StatusUnauthorized, CodeBadLogin, 0}
+	}
+	lim.done(p, usn, ip, err == nil)
+	if err != nil {
+		log.Printf("fetch failed: %v", err)
+	}
+	switch {
+	case err == nil:
+		return snap, nil
+	case errors.Is(err, portal.ErrPortalDown):
+		return nil, &loginFail{http.StatusBadGateway, CodePortalDown, 0}
+	case errors.Is(err, portal.ErrForbidden):
+		// the portal is blocking our IP: an upstream failure, not the student's
+		return nil, &loginFail{http.StatusBadGateway, CodePortalBlocked, 0}
+	case errors.Is(err, portal.ErrPortalChanged):
+		return nil, &loginFail{http.StatusBadGateway, CodePortalChanged, 0}
+	default:
+		return nil, &loginFail{http.StatusInternalServerError, CodeInternal, 0}
 	}
 }
 
@@ -184,7 +210,7 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 func validate(req Request, now time.Time) (string, time.Time, portal.Extras, bool) {
 	var want portal.Extras
 	usn := strings.ToUpper(strings.TrimSpace(req.USN))
-	if !reUSN.MatchString(usn) {
+	if !usnfmt.Valid(usn) {
 		return "", time.Time{}, want, false
 	}
 	dob, err := time.Parse("02012006", strings.TrimSpace(req.DOB))
@@ -223,10 +249,7 @@ func Build(snap *portal.Snapshot, usn string) Response {
 	if d.USN != "" {
 		usn = d.USN
 	}
-	dept := ""
-	if len(usn) >= 7 {
-		dept = usn[5:7]
-	}
+	dept := usnfmt.Dept(usn)
 	out := Response{
 		Student: Student{
 			USN: usn, Name: d.Name, Dept: dept, Sem: d.Sem, Section: d.Section, LastUpdated: d.LastUpdated,
@@ -274,6 +297,12 @@ func Build(snap *portal.Snapshot, usn string) Response {
 		})
 	}
 	return out
+}
+
+// writeJSON sends v as a 200 JSON reply.
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
 }
 
 func writeErr(w http.ResponseWriter, status int, code string) {

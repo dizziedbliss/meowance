@@ -52,7 +52,25 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   `FEEDBACK_TO` (Max's inbox; never in the repo). Missing env → 503 `feedback_off`; the devserver
   logs feedback instead. Limits: 1000 chars, 5/IP/hour, 100/instance/hour; failed sends don't count.
   The USN is whatever the browser sends (not verified).
-- **`cmd/devserver`**: same handler locally, optional fixture mode.
+- **Notes sharing** (`pkg/notes`, `pkg/api/notes.go`, `api/notes/index.go`, web `lib/notes.ts` +
+  `components/Notes.tsx`): students share note files per course. A portal-verified login (`POST login`)
+  returns a 7-day HMAC token (`NOTES_TOKEN_SECRET`) so posting works when the portal sleeps. Files live in
+  Max's Google Drive (`drive.file` scope, OAuth refresh token in `GOOGLE_*` env, one folder per
+  course: `meowance/notes/<course>/`, since a course code already says its sem and branch; anyone can
+  upload to any course code, including other branches'); the browser uploads straight to a Drive session URL (Vercel
+  caps bodies at 4.5 MB, hence the `connect-src https://www.googleapis.com`). Students only see our
+  `/api/notes?file=<id>` link, which redirects to the store, so the files can move to another account or
+  backend without breaking links (`Store` interface: Drive, MemStore for dev). Rows (notes, votes, reports)
+  are Neon Postgres via pgx (`DATABASE_URL`, `pkg/notes/schema.sql`, idempotent; created by hand, never
+  automatically). A note is `pending` until the store confirms the upload, then `live`; 5 notes a day per USN,
+  enforced atomically in the repo. Notes show a random funny label, never the USN. Reports email Max.
+  The Postgres test (`NOTES_LIVE_DB=1`) runs in a throwaway schema and refuses if it isn't in it.
+  Env on Vercel (Production): `GOOGLE_CLIENT_ID/SECRET/REFRESH_TOKEN`, `NOTES_TOKEN_SECRET`, `DATABASE_URL`
+  (Neon, pooled), optional `NOTES_ORIGINS` (extra comma-separated page origins allowed to upload; the prod URL
+  is built in). Takedown: reports email Max the note id; `go run ./cmd/notesadmin remove <id>` (needs
+  `DATABASE_URL` and the `GOOGLE_*` vars in the shell) deletes the file and the row. Course folders are found
+  by name and the oldest wins (`orderBy=createdTime`), so two cold instances racing to make one agree.
+- **`cmd/devserver`**: same handler locally, optional fixture mode; notes run fully in memory there.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
   zone (bunkable / show up / don't you dare); `lib/scores.ts` the CIE verdicts; `lib/cgpa.ts` the scores → "target" tab (needed SGPA, a grade + see marks per course, a course that tops out low is capped and the others cover for it; the see is shown out of 100, the portal's /50 doubled; the bands and pass rules are the 2024-25 handbook's, so the tab only shows for the 24 batch and older); `lib/events.ts`
@@ -74,7 +92,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
   screen, bottom nav is a background-less overlay over the dark fade, labels split by hairlines, active tab underlined in orange (Max rejected a solid bar: "ew"). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
-  (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
+  (pawsent, lives, purring). **Write it the way Max talks**: u / ur / n / rn / tmrw / w, drawn-out vowels
+  ("donneeee"), "heh", "lol", like his changelog posts in `data/board.ts`. Never polished-English lines
+  ("nobody sees who posted it" got an "ewwww"). When unsure, copy the tone of the login errors. Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.
 - Credentials are never stored server-side or logged. Test fixtures are **mock data**: real page layouts, but
   every personal value invented (USN `4MC00AA000`, `STUDENT`, lecturers `FACULTY`, the generic
@@ -125,6 +145,11 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 ## Known issues
 
 - The guard is per warm instance, not global; the firewall rule is the cross-instance limit.
+  `/api/attendance` and `/api/notes` (its login) are separate functions, so each has its own counts:
+  before notes goes live, add the same per-IP firewall rule on `/api/notes`.
 - When its table is full of live counts (100k keys in 15 min) the guard fails closed: new USNs get
   429 for up to a minute. Deliberate: fail-open was a bypass. Full sweeps are throttled to one per 10s.
 - Login is only as safe as MCE's (USN + birthday).
+- Notes need the Google OAuth app published ("In production"): in "Testing" mode Google expires the refresh
+  token after 7 days and every notes call would answer 502 `storage_error`.
+- A report is just an email; reported notes stay listed until Max runs `notesadmin remove`.

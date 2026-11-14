@@ -3,6 +3,7 @@ import { BottomNav, type Tab } from "./components/BottomNav";
 import { Dashboard } from "./components/Dashboard";
 import { Events } from "./components/Events";
 import { Login } from "./components/Login";
+import { Notes } from "./components/Notes";
 import { Logo } from "./components/Logo";
 import { Scores, type ScoresView } from "./components/Scores";
 import { Timetable } from "./components/Timetable";
@@ -22,6 +23,7 @@ function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView)
   const each = (kind: "history") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
   if (tab === "timetable") return ["timetable"];
   if (tab === "events") return ["calendar"];
+  if (tab === "notes") return []; // notes load from their own endpoint, not the portal
   if (tab === "scores") return scores === "now" ? [] : ["exams"];
   return each("history"); // dated tally boxes; cached until a course's counts change
 }
@@ -136,6 +138,8 @@ export default function App() {
             <Scores data={data} view={scoresView} onView={setScoresView} loading={syncing} />
           ) : tab === "events" ? (
             <Events data={data} loading={syncing} />
+          ) : tab === "notes" ? (
+            <Notes data={data} />
           ) : (
             <Dashboard data={data} open={open} onOpen={setOpen} loading={syncing} />
           )}
