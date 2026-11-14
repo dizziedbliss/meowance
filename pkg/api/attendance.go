@@ -18,6 +18,7 @@ import (
 
 	"github.com/dizziedbliss/meowance/pkg/attend"
 	"github.com/dizziedbliss/meowance/pkg/portal"
+	usnfmt "github.com/dizziedbliss/meowance/pkg/usn"
 )
 
 // Fetcher is what the handler needs from the portal (a real *portal.Client, or a fixture in dev).
@@ -100,9 +101,6 @@ const (
 	CodeStorage        = "storage_error"
 )
 
-// Only MCE students: 4MC + 2-digit year + 2-letter branch + 3-digit roll.
-var reUSN = regexp.MustCompile(`^4MC[0-9]{2}[A-Z]{2}[0-9]{3}$`)
-
 // A course code as the portal prints it (23AI701, 23OEEC71, 23AI704D).
 var reCourseCode = regexp.MustCompile(`^[0-9]{2}[A-Z0-9]{2,10}$`)
 
@@ -149,8 +147,7 @@ func attendance(f Fetcher, lim *limiter) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(Build(snap, usn))
+		writeJSON(w, Build(snap, usn))
 	}
 }
 
@@ -213,7 +210,7 @@ func portalLogin(r *http.Request, f Fetcher, lim *limiter, usn string, dob time.
 func validate(req Request, now time.Time) (string, time.Time, portal.Extras, bool) {
 	var want portal.Extras
 	usn := strings.ToUpper(strings.TrimSpace(req.USN))
-	if !reUSN.MatchString(usn) {
+	if !usnfmt.Valid(usn) {
 		return "", time.Time{}, want, false
 	}
 	dob, err := time.Parse("02012006", strings.TrimSpace(req.DOB))
@@ -252,10 +249,7 @@ func Build(snap *portal.Snapshot, usn string) Response {
 	if d.USN != "" {
 		usn = d.USN
 	}
-	dept := ""
-	if len(usn) >= 7 {
-		dept = usn[5:7]
-	}
+	dept := usnfmt.Dept(usn)
 	out := Response{
 		Student: Student{
 			USN: usn, Name: d.Name, Dept: dept, Sem: d.Sem, Section: d.Section, LastUpdated: d.LastUpdated,
@@ -303,6 +297,12 @@ func Build(snap *portal.Snapshot, usn string) Response {
 		})
 	}
 	return out
+}
+
+// writeJSON sends v as a 200 JSON reply.
+func writeJSON(w http.ResponseWriter, v any) {
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(v)
 }
 
 func writeErr(w http.ResponseWriter, status int, code string) {

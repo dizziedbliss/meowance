@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	usnfmt "github.com/dizziedbliss/meowance/pkg/usn"
 	"io"
 	"log"
 	"net/http"
@@ -64,7 +65,7 @@ func feedback(m Mailer, now func() time.Time) http.HandlerFunc {
 		}
 		usn := strings.ToUpper(strings.TrimSpace(req.USN))
 		msg := strings.TrimSpace(req.Message)
-		if !reUSN.MatchString(usn) || msg == "" || utf8.RuneCountInString(msg) > maxFeedback {
+		if !usnfmt.Valid(usn) || msg == "" || utf8.RuneCountInString(msg) > maxFeedback {
 			writeErr(w, http.StatusBadRequest, CodeBadInput)
 			return
 		}
@@ -92,8 +93,7 @@ func feedback(m Mailer, now func() time.Time) http.HandlerFunc {
 			writeErr(w, http.StatusBadGateway, CodeFeedbackError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+		writeJSON(w, map[string]bool{"ok": true})
 	}
 }
 

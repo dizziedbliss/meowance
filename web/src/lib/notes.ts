@@ -1,16 +1,11 @@
+import type { ApiErrorCode } from "./types";
 import { loadCreds, NOTES_TOKEN, NOTES_VOTED } from "./vault";
 
 export type Note = { id: string; title: string; label: string; mime: string; size: number; votes: number; created: string };
 
+/** The login and portal failures are the attendance ones; the rest are notes-only. */
 export type NotesErrorCode =
-  | "bad_input"
-  | "bad_login"
-  | "too_many_tries"
-  | "portal_down"
-  | "portal_changed"
-  | "portal_blocked"
-  | "internal"
-  | "network"
+  | ApiErrorCode
   | "bad_token"
   | "not_found"
   | "forbidden"

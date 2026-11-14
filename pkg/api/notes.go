@@ -211,8 +211,3 @@ func notesErr(w http.ResponseWriter, err error) {
 		writeErr(w, http.StatusBadGateway, CodeStorage)
 	}
 }
-
-func writeJSON(w http.ResponseWriter, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(v)
-}

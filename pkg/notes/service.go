@@ -11,6 +11,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	usnfmt "github.com/dizziedbliss/meowance/pkg/usn"
 )
 
 // DailyUploads is how many notes one verified student can start in 24 hours.
@@ -253,8 +255,8 @@ func (s *Service) live(ctx context.Context, id string) (Note, error) {
 
 // deptOf reads the 2-letter department from an MCE USN like 4MC23AI001.
 func deptOf(usn string) (string, error) {
-	if len(usn) != 10 || !strings.EqualFold(usn[:3], "4MC") {
+	if !usnfmt.Valid(usn) {
 		return "", fmt.Errorf("%w: USN", ErrBadInput)
 	}
-	return strings.ToUpper(usn[5:7]), nil
+	return usnfmt.Dept(usn), nil
 }

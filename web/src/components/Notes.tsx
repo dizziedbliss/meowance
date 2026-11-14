@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { isoDayMonth } from "../lib/dates";
 import {
   type Note,
   listNotes,
@@ -19,7 +20,6 @@ import { field } from "./field";
 import { SubTabs } from "./SubTabs";
 
 const kind = (mime: string) => (mime === "application/pdf" ? "pdf" : mime === "image/png" ? "png" : "jpg");
-const day = (iso: string) => new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" }).toLowerCase();
 const failure = (x: unknown) => notesErrorCopy[x instanceof NotesError ? x.code : "internal"];
 
 /** Notes other students shared, one course at a time. Posters show as funny labels, never names. */
@@ -154,7 +154,7 @@ export function Notes({ data }: { data: Attendance }) {
                 {n.title}
               </a>
               <div className="mt-1 font-mono text-xs text-mut">
-                {n.label} · {kind(n.mime)} {sizeLabel(n.size)} · {day(n.created)}
+                {n.label} · {kind(n.mime)} {sizeLabel(n.size)} · {isoDayMonth(n.created.slice(0, 10)).toLowerCase()}
               </div>
             </div>
             <div className="flex items-start gap-4 font-mono text-xs">
