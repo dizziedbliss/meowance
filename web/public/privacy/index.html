@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0B0A09" />
+    <meta name="description" content="what meowance does with your data. short version: as little as possible." />
+    <link rel="icon" type="image/svg+xml" href="/brand/1x1 logo.svg" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..900&family=Geist+Mono:wght@400;500&family=Schibsted+Grotesk:wght@400..700&display=swap" />
+    <link rel="stylesheet" href="/legal.css" />
+    <title>privacy · meowance</title>
+  </head>
+  <body>
+    <main>
+      <div class="top"><a href="/">← meowance</a></div>
+      <h1>privacy<i>.</i></h1>
+      <p class="when">last updated 15 nov 2026</p>
+      <p>meowance is a student project by Max, for students of Malnad College of Engineering (MCE). it is not run by, or affiliated with, MCE or the Contineo portal. this page says what it does with your data. short version: as little as possible.</p>
+
+      <section>
+        <h2>logging in</h2>
+        <p>you type your USN and birthday. our server uses them once, to log in to the college's Contineo portal as you and read your attendance, timetable, calendar, scores and past results. to get past the portal's blocking of cloud servers, that request goes through a proxy service (Oxylabs). we do not store your USN or birthday on our server, and we do not write them to logs.</p>
+      </section>
+
+      <section>
+        <h2>what stays in your browser</h2>
+        <p>so you don't have to log in every time, your USN and birthday are saved in your own browser, encrypted with a key that can't be exported. the last attendance data we fetched is saved there too. logging out wipes both. nothing else is saved on your device by us.</p>
+      </section>
+
+      <section>
+        <h2>what our server remembers</h2>
+        <ul>
+          <li>a short-lived, in-memory count of wrong-birthday tries per USN and IP address (about 15 minutes), to stop people guessing other students' birthdays. it disappears when the server instance restarts.</li>
+          <li>standard hosting logs from Vercel (time, path, status, IP address). we do not add your login details to them.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>feedback</h2>
+        <p>if you use the "tell max" box, the message and the USN you typed are emailed to Max (through Resend). the USN there is whatever your browser sent; it is not verified.</p>
+      </section>
+
+      <section>
+        <h2>notes sharing</h2>
+        <p>when you upload a note, we keep the file, its title, the course code, and your USN (to apply upload limits and to remove notes on request). the USN is never shown to other students: notes show a random label like "just another nerd". to confirm it's really you, posting logs in to the portal the same way as above, then gives your browser a signed token that lasts 7 days.</p>
+        <p>uploaded files are stored in a Google Drive folder owned by Max, and anyone with the link to a note can open it. meowance uses that Google account only to store and serve these files. you never sign in with Google, and meowance never reads anyone's Google data. file details and votes are stored in a database (Neon).</p>
+      </section>
+
+      <section>
+        <h2>what we don't do</h2>
+        <p>no ads, no selling or sharing your data, no tracking scripts of our own.</p>
+      </section>
+
+      <section>
+        <h2>removing things, asking things</h2>
+        <p>log out to wipe what's in your browser. to remove a note you uploaded, or to ask anything about this page, use the "tell max" box in the app.</p>
+      </section>
+
+      <p class="foot"><a href="/terms/">terms</a> · <a href="/">back to meowance</a></p>
+    </main>
+  </body>
+</html>
