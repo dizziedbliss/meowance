@@ -77,10 +77,18 @@ type InitResult struct{ NoteID, Session string }
 
 // View is a note as other students see it: a label, never who posted.
 type View struct {
-	ID, Title, Label, MIME string
-	Size                   int64
-	Votes                  int
-	Created                time.Time
+	ID      string    `json:"id"`
+	Title   string    `json:"title"`
+	Label   string    `json:"label"`
+	MIME    string    `json:"mime"`
+	Size    int64     `json:"size"`
+	Votes   int       `json:"votes"`
+	Created time.Time `json:"created"`
+}
+
+// ViewOf is a note as students see it.
+func ViewOf(n Note) View {
+	return View{ID: n.ID, Title: n.Title, Label: Label(n.ID, n.Dept), MIME: n.MIME, Size: n.Size, Votes: n.Votes, Created: n.Created}
 }
 
 func (s *Service) now() time.Time {
@@ -181,7 +189,7 @@ func (s *Service) List(ctx context.Context, code string) ([]View, error) {
 	}
 	out := make([]View, 0, len(rows))
 	for _, n := range rows {
-		out = append(out, View{ID: n.ID, Title: n.Title, Label: Label(n.ID, n.Dept), MIME: n.MIME, Size: n.Size, Votes: n.Votes, Created: n.Created})
+		out = append(out, ViewOf(n))
 	}
 	return out, nil
 }
