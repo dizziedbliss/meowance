@@ -8,6 +8,12 @@ export type Post = {
 
 export const posts: Post[] = [
   {
+    when: "15 nov",
+    title: "CGPA Calculator hereeeeeeeeeeee",
+    body: "well yah same as the heading says - go find it heh",
+    sign: "Max!!",
+  },
+  {
     when: "13 nov",
     title: "receipts are real now",
     body: "Now suggesting u to bunk on few days aswell- and absent and present dates are real and live, added exam historyyyy and faster thannnnn beforeeeeee :3",
