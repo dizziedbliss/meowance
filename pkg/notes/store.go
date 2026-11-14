@@ -16,6 +16,9 @@ type Store interface {
 	// Finish checks that what landed is the upload we announced, then makes it
 	// viewable by link.
 	Finish(ctx context.Context, u Upload, key string) (Stored, error)
+	// Discard removes whatever the store holds under this upload's own file name (the
+	// note id), after a failed check. It never touches a file named by the client.
+	Discard(ctx context.Context, u Upload) error
 	// Link is where a student is sent to open or download the file.
 	Link(key string) string
 	// Delete removes the file; one that is already gone is not an error.

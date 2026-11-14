@@ -37,12 +37,16 @@ type Note struct {
 
 // Repo is where note rows live (Postgres in production, memory in tests).
 type Repo interface {
-	Create(ctx context.Context, n Note) error
+	// CreateWithin records a new pending note only if this uploader has started fewer
+	// than max notes since the given time, counting every status. It must be one atomic
+	// step, so parallel requests can't slip past the limit.
+	CreateWithin(ctx context.Context, n Note, since time.Time, max int) (created bool, err error)
+	// Reject marks a pending note as failed; it stays on record and keeps counting.
+	Reject(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (Note, error) // ErrNotFound if missing; Votes filled
 	SetLive(ctx context.Context, id, key string, size int64, mime string) error
 	Delete(ctx context.Context, id string) error
 	ListLive(ctx context.Context, code string) ([]Note, error) // newest first; Votes filled
-	CountUploads(ctx context.Context, usn string, since time.Time) (int, error)
 	Vote(ctx context.Context, id, usn string) (added bool, err error)
 	Report(ctx context.Context, id, usn, reason string) (added bool, err error)
 }
@@ -121,19 +125,19 @@ func (s *Service) Init(ctx context.Context, usn string, in InitInput) (InitResul
 		return InitResult{}, fmt.Errorf("%w: origin", ErrBadInput)
 	}
 	now := s.now()
-	if n, err := s.Repo.CountUploads(ctx, usn, now.Add(-24*time.Hour)); err != nil {
-		return InitResult{}, err
-	} else if n >= DailyUploads {
-		return InitResult{}, ErrTooMany
-	}
 	note := Note{ID: id, Code: code, Dept: dept, Sem: in.Sem, Title: title, Storage: "gdrive",
 		MIME: in.MIME, Size: in.Size, Uploader: usn, Status: "pending", Created: now}
-	if err := s.Repo.Create(ctx, note); err != nil {
+	created, err := s.Repo.CreateWithin(ctx, note, now.Add(-24*time.Hour), DailyUploads)
+	if err != nil {
 		return InitResult{}, err
+	}
+	if !created {
+		return InitResult{}, ErrTooMany
 	}
 	session, err := s.Store.NewUpload(ctx, up)
 	if err != nil {
-		s.Repo.Delete(ctx, id) // don't leave a note with no upload behind
+		// our side failed, not the student's: give the slot back
+		s.Repo.Delete(ctx, id)
 		return InitResult{}, err
 	}
 	return InitResult{NoteID: id, Session: session}, nil
@@ -155,8 +159,11 @@ func (s *Service) Commit(ctx context.Context, usn, id, key string) (Note, error)
 	up := Upload{NoteID: n.ID, MIME: n.MIME, Size: n.Size, Dept: n.Dept, Sem: n.Sem, Code: n.Code}
 	stored, err := s.Store.Finish(ctx, up, key)
 	if err != nil {
-		if errors.Is(err, ErrRejected) || errors.Is(err, ErrNotFound) {
-			s.Repo.Delete(ctx, id)
+		if errors.Is(err, ErrRejected) {
+			// a bad upload keeps its slot (so retries can't dodge the daily limit) and its
+			// stray file goes; the key the client sent is never deleted, it may not be theirs
+			s.Store.Discard(ctx, up)
+			s.Repo.Reject(ctx, id)
 		}
 		return Note{}, err
 	}

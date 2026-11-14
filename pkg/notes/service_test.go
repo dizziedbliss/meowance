@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 // memRepo is an in-memory Repo.
 type memRepo struct {
+	mu      sync.Mutex
 	notes   map[string]*Note
 	votes   map[string]map[string]bool
 	reports map[string]map[string]string
@@ -21,8 +23,34 @@ func newMemRepo() *memRepo {
 	return &memRepo{notes: map[string]*Note{}, votes: map[string]map[string]bool{}, reports: map[string]map[string]string{}}
 }
 
-func (r *memRepo) Create(_ context.Context, n Note) error { r.notes[n.ID] = &n; return nil }
+func (r *memRepo) CreateWithin(_ context.Context, n Note, since time.Time, max int) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	c := 0
+	for _, o := range r.notes {
+		if o.Uploader == n.Uploader && !o.Created.Before(since) {
+			c++
+		}
+	}
+	if c >= max {
+		return false, nil
+	}
+	r.notes[n.ID] = &n
+	return true, nil
+}
+func (r *memRepo) Reject(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n, ok := r.notes[id]
+	if !ok {
+		return ErrNotFound
+	}
+	n.Status = "rejected"
+	return nil
+}
 func (r *memRepo) Get(_ context.Context, id string) (Note, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	n, ok := r.notes[id]
 	if !ok {
 		return Note{}, ErrNotFound
@@ -52,15 +80,6 @@ func (r *memRepo) ListLive(_ context.Context, code string) ([]Note, error) {
 	sort.Slice(out, func(i, j int) bool { return out[i].Created.After(out[j].Created) })
 	return out, nil
 }
-func (r *memRepo) CountUploads(_ context.Context, usn string, since time.Time) (int, error) {
-	c := 0
-	for _, n := range r.notes {
-		if n.Uploader == usn && !n.Created.Before(since) {
-			c++
-		}
-	}
-	return c, nil
-}
 func (r *memRepo) Vote(_ context.Context, id, usn string) (bool, error) {
 	if r.votes[id] == nil {
 		r.votes[id] = map[string]bool{}
@@ -84,14 +103,18 @@ func (r *memRepo) Report(_ context.Context, id, usn, reason string) (bool, error
 
 // fakeStore records what the service asks of a Store.
 type fakeStore struct {
-	opened  []Upload
-	finish  []Upload
-	deleted []string
-	newErr  error
-	finErr  error
+	mu        sync.Mutex
+	discarded []Upload
+	opened    []Upload
+	finish    []Upload
+	deleted   []string
+	newErr    error
+	finErr    error
 }
 
 func (s *fakeStore) NewUpload(_ context.Context, u Upload) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	if s.newErr != nil {
 		return "", s.newErr
 	}
@@ -104,6 +127,10 @@ func (s *fakeStore) Finish(_ context.Context, u Upload, key string) (Stored, err
 		return Stored{}, s.finErr
 	}
 	return Stored{Key: key, Size: u.Size, MIME: u.MIME}, nil
+}
+func (s *fakeStore) Discard(_ context.Context, u Upload) error {
+	s.discarded = append(s.discarded, u)
+	return nil
 }
 func (s *fakeStore) Link(key string) string { return "https://files.example/" + key }
 func (s *fakeStore) Delete(_ context.Context, key string) error {
@@ -118,13 +145,14 @@ type harness struct {
 	now      time.Time
 	reported []ReportInfo
 	n        int
+	idMu     sync.Mutex
 }
 
 func newHarness() *harness {
 	h := &harness{repo: newMemRepo(), store: &fakeStore{}, now: time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)}
 	h.svc = &Service{
 		Repo: h.repo, Store: h.store,
-		NewID:  func() string { h.n++; return fmt.Sprintf("n%d", h.n) },
+		NewID:  func() string { h.idMu.Lock(); defer h.idMu.Unlock(); h.n++; return fmt.Sprintf("n%d", h.n) },
 		Now:    func() time.Time { return h.now },
 		Notify: func(_ context.Context, r ReportInfo) error { h.reported = append(h.reported, r); return nil },
 	}
@@ -256,15 +284,64 @@ func TestCommitIsOnlyForTheUploaderAndOnlyOnce(t *testing.T) {
 	}
 }
 
-func TestCommitDiscardsAnUploadTheStoreRejects(t *testing.T) {
+func TestRejectedUploadIsDiscardedButStillCounts(t *testing.T) {
 	h := newHarness()
 	r, _ := h.svc.Init(context.Background(), usn, in())
 	h.store.finErr = ErrRejected
 	if _, err := h.svc.Commit(context.Background(), usn, r.NoteID, "k"); !errors.Is(err, ErrRejected) {
 		t.Fatalf("err = %v, want ErrRejected", err)
 	}
-	if _, ok := h.repo.notes[r.NoteID]; ok {
-		t.Error("a rejected upload left its pending note behind")
+	if n := h.repo.notes[r.NoteID]; n == nil || n.Status != "rejected" {
+		t.Fatalf("note = %+v: a rejected upload must stay on record so it counts toward the limit", n)
+	}
+	if len(h.store.discarded) != 1 || h.store.discarded[0].NoteID != r.NoteID {
+		t.Errorf("discarded = %+v: the stray file in the store should be removed", h.store.discarded)
+	}
+	if len(h.store.deleted) != 0 {
+		t.Errorf("deleted %v: never delete the key the client sent, it may be someone else's file", h.store.deleted)
+	}
+	if _, err := h.svc.Commit(context.Background(), usn, r.NoteID, "k"); !errors.Is(err, ErrNotFound) {
+		t.Errorf("a rejected note can't be committed again: %v", err)
+	}
+	if got, _ := h.svc.List(context.Background(), "23AI501"); len(got) != 0 {
+		t.Errorf("a rejected note is listed: %+v", got)
+	}
+}
+
+func TestFailedUploadsCannotBeRetriedForever(t *testing.T) {
+	h := newHarness()
+	h.store.finErr = ErrRejected
+	for i := 0; i < DailyUploads; i++ {
+		r, err := h.svc.Init(context.Background(), usn, in())
+		if err != nil {
+			t.Fatalf("attempt %d: %v", i+1, err)
+		}
+		h.svc.Commit(context.Background(), usn, r.NoteID, "k")
+	}
+	if _, err := h.svc.Init(context.Background(), usn, in()); !errors.Is(err, ErrTooMany) {
+		t.Errorf("after %d failed uploads: err = %v, want ErrTooMany", DailyUploads, err)
+	}
+}
+
+func TestParallelInitsCannotRaceThePastTheLimit(t *testing.T) {
+	h := newHarness()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	ok := 0
+	for i := 0; i < 40; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if _, err := h.svc.Init(context.Background(), usn, in()); err == nil {
+				mu.Lock()
+				ok++
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Wait()
+	if ok != DailyUploads {
+		t.Errorf("%d of 40 parallel uploads got through, want exactly %d", ok, DailyUploads)
 	}
 }
 

@@ -68,9 +68,10 @@ func (f *fakeDrive) serve(w http.ResponseWriter, r *http.Request) {
 	case r.Method == "GET" && p == "/drive/v3/files": // folder lookup
 		q := r.URL.Query().Get("q")
 		name, parent := qName.FindStringSubmatch(q)[1], qParent.FindStringSubmatch(q)[1]
+		wantFolder := strings.Contains(q, folderMIME)
 		out := []map[string]string{}
 		for _, fl := range f.files {
-			if fl.MIME == folderMIME && fl.Name == name && fl.Parent == parent {
+			if (fl.MIME == folderMIME) == wantFolder && fl.Name == name && fl.Parent == parent {
 				out = append(out, map[string]string{"id": fl.ID})
 			}
 		}
@@ -281,6 +282,21 @@ func TestDeleteRemovesAndForgivesAlreadyGone(t *testing.T) {
 	}
 	if err := d.Delete(context.Background(), id); err != nil {
 		t.Errorf("deleting twice should be fine, got %v", err)
+	}
+}
+
+func TestDiscardRemovesTheStrayFileByItsNoteName(t *testing.T) {
+	f, d := newFake(t)
+	mine := f.land(t, d, up(), "n1a2b3.pdf", "application/pdf", 1234)
+	theirs := f.land(t, d, up(), "other.pdf", "application/pdf", 1234) // another note in the same folder
+	if err := d.Discard(context.Background(), up()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.deleted) != 1 || f.deleted[0] != mine {
+		t.Errorf("deleted = %v, want only %s (never %s)", f.deleted, mine, theirs)
+	}
+	if err := d.Discard(context.Background(), up()); err != nil {
+		t.Errorf("nothing left to discard should be fine: %v", err)
 	}
 }
 

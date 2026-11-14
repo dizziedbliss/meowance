@@ -146,6 +146,37 @@ func (d *Drive) Finish(ctx context.Context, u Upload, key string) (Stored, error
 	return Stored{Key: key, Size: size, MIME: f.MimeType}, nil
 }
 
+// Discard deletes the stray file a rejected upload left in its course folder. It looks
+// the file up by the note's own name (server-made), never by an id the client sent.
+func (d *Drive) Discard(ctx context.Context, u Upload) error {
+	if err := u.check(); err != nil {
+		return err
+	}
+	parent, err := d.folder(ctx, u)
+	if err != nil {
+		return err
+	}
+	q := fmt.Sprintf("name='%s' and '%s' in parents and trashed=false", u.fileName(), parent)
+	resp, err := d.do(ctx, "GET", d.apiBase+"/drive/v3/files?pageSize=10&spaces=drive&fields="+url.QueryEscape("files(id)")+"&q="+url.QueryEscape(q), nil, nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if err := okStatus(resp); err != nil {
+		return err
+	}
+	var found struct{ Files []struct{ ID string } }
+	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<16)).Decode(&found); err != nil {
+		return err
+	}
+	for _, f := range found.Files {
+		if err := d.Delete(ctx, f.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (d *Drive) Link(key string) string {
 	return "https://drive.google.com/uc?id=" + url.QueryEscape(key) + "&export=download"
 }
