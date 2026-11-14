@@ -116,6 +116,7 @@ func main() {
 	// notes: all in memory (no Drive, no database), so the screens can be tried offline.
 	// Files vanish when the dev server stops. The store's links are relative, so they go through Vite's /api proxy.
 	store := notes.NewMemStore("")
+	store.Delay = 2 * time.Second // feel like a real upload
 	store.Routes(mux)
 	signer, _ := notes.NewSigner("dev-only-secret-dev-only-secret-0")
 	devNotes := &api.NotesDeps{

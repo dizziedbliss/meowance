@@ -42,7 +42,6 @@ type notesReq struct {
 	DOB    string `json:"dob"`
 	Title  string `json:"title"`
 	Code   string `json:"code"`
-	Sem    string `json:"sem"`
 	MIME   string `json:"mime"`
 	Size   int64  `json:"size"`
 	NoteID string `json:"noteId"`
@@ -154,7 +153,7 @@ func notesWrite(w http.ResponseWriter, r *http.Request, d *NotesDeps, lim *limit
 		return
 	}
 	switch req.Action {
-	case "init": // title, code, sem, mime, size; the Origin header says which page may upload
+	case "init": // title, code, mime, size; the Origin header says which page may upload
 		origin := r.Header.Get("Origin")
 		if origin == "" {
 			writeErr(w, http.StatusBadRequest, CodeBadInput)
@@ -164,7 +163,7 @@ func notesWrite(w http.ResponseWriter, r *http.Request, d *NotesDeps, lim *limit
 			writeErr(w, http.StatusForbidden, CodeForbidden)
 			return
 		}
-		res, err := d.Svc.Init(ctx, usn, notes.InitInput{Title: req.Title, Code: req.Code, Sem: req.Sem, MIME: req.MIME, Size: req.Size, Origin: origin})
+		res, err := d.Svc.Init(ctx, usn, notes.InitInput{Title: req.Title, Code: req.Code, MIME: req.MIME, Size: req.Size, Origin: origin})
 		if err != nil {
 			notesErr(w, err)
 			return

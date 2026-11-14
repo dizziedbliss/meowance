@@ -24,7 +24,7 @@ type DriveConfig struct {
 	Root                                 string // top folder, default "meowance"
 }
 
-// Drive stores notes in Google Drive under <Root>/notes/<dept>/<sem>/<course>/.
+// Drive stores notes in Google Drive under <Root>/notes/<course>/ (a course code already says which sem and branch it is).
 // It uses the narrow drive.file scope, so it can only see what it created.
 type Drive struct {
 	cfg                           DriveConfig
@@ -196,13 +196,13 @@ func (d *Drive) Delete(ctx context.Context, key string) error {
 	return okStatus(resp)
 }
 
-// folder returns the id of <root>/notes/<dept>/<sem>/<course>, making any missing
+// folder returns the id of <root>/notes/<course>, making any missing
 // level. A cold instance finds existing folders by name instead of remaking them.
 func (d *Drive) folder(ctx context.Context, u Upload) (string, error) {
 	d.fmu.Lock()
 	defer d.fmu.Unlock()
 	parent, path := "root", ""
-	for _, name := range []string{d.cfg.Root, "notes", u.Dept, u.Sem, u.Code} {
+	for _, name := range []string{d.cfg.Root, "notes", u.Code} {
 		path += "/" + name
 		if id, ok := d.folders[path]; ok {
 			parent = id

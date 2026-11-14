@@ -81,7 +81,7 @@ func errCode(rec *httptest.ResponseRecorder) string {
 	return out.Error
 }
 
-const initBody = `{"action":"init","title":"Unit 3 notes","code":"23ai501","sem":"5","mime":"application/pdf","size":6}`
+const initBody = `{"action":"init","title":"Unit 3 notes","code":"23ai501","mime":"application/pdf","size":6}`
 
 // upload runs init, sends the file to the store like the browser would, and returns the note id and key.
 func (r *notesRig) upload(token string) (id, key string) {
@@ -235,7 +235,7 @@ func TestNotesInitChecksOriginAndLimit(t *testing.T) {
 	if rec := r.call("POST", "/api/notes", initBody, tok, origin); rec.Code != 429 || errCode(rec) != "too_many_uploads" {
 		t.Errorf("over the daily limit = %d %s, want 429 too_many_uploads", rec.Code, rec.Body)
 	}
-	bad := `{"action":"init","title":"","code":"23ai501","sem":"5","mime":"application/pdf","size":6}`
+	bad := `{"action":"init","title":"","code":"23ai501","mime":"application/pdf","size":6}`
 	if rec := r.call("POST", "/api/notes", bad, r.login(usnB), origin); rec.Code != 400 || errCode(rec) != "bad_input" {
 		t.Errorf("empty title = %d %s, want 400 bad_input", rec.Code, rec.Body)
 	}

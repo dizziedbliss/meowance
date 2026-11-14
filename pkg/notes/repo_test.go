@@ -12,7 +12,7 @@ import (
 var base = time.Date(2026, 11, 15, 12, 0, 0, 0, time.UTC)
 
 func note(id, usn, code string, at time.Time) Note {
-	return Note{ID: id, Code: code, Dept: "AI", Sem: "5", Title: "t " + id, Storage: "gdrive",
+	return Note{ID: id, Code: code, Dept: "AI", Title: "t " + id, Storage: "gdrive",
 		MIME: "application/pdf", Size: 10, Uploader: usn, Status: "pending", Created: at}
 }
 

@@ -69,7 +69,7 @@ func newHarness() *harness {
 }
 
 func in() InitInput {
-	return InitInput{Title: "Unit 3 notes", Code: "23ai501", Sem: "5", MIME: "application/pdf", Size: 2048, Origin: "https://meowance.vercel.app"}
+	return InitInput{Title: "Unit 3 notes", Code: "23ai501", MIME: "application/pdf", Size: 2048, Origin: "https://meowance.vercel.app"}
 }
 
 const usn = "4MC23AI001"
@@ -94,10 +94,10 @@ func TestInitOpensAPendingNote(t *testing.T) {
 		t.Fatalf("Init = %+v, %v", r, err)
 	}
 	n := h.repo.notes["n1"]
-	if n.Status != "pending" || n.Uploader != usn || n.Dept != "AI" || n.Code != "23AI501" || n.Sem != "5" || n.Storage != "gdrive" {
+	if n.Status != "pending" || n.Uploader != usn || n.Dept != "AI" || n.Code != "23AI501" || n.Storage != "gdrive" {
 		t.Errorf("pending note = %+v", n)
 	}
-	want := Upload{NoteID: "n1", MIME: "application/pdf", Size: 2048, Origin: "https://meowance.vercel.app", Dept: "AI", Sem: "5", Code: "23AI501"}
+	want := Upload{NoteID: "n1", MIME: "application/pdf", Size: 2048, Origin: "https://meowance.vercel.app", Code: "23AI501"}
 	if len(h.store.opened) != 1 || h.store.opened[0] != want {
 		t.Errorf("store got %+v, want %+v", h.store.opened, want)
 	}
@@ -110,9 +110,6 @@ func TestInitRejectsBadInputBeforeTouchingAnything(t *testing.T) {
 		"control chars": func(i *InitInput) { i.Title = "hi\x00there" },
 		"bad code":      func(i *InitInput) { i.Code = "23 AI;501" },
 		"empty code":    func(i *InitInput) { i.Code = "" },
-		"sem 0":         func(i *InitInput) { i.Sem = "0" },
-		"sem 9":         func(i *InitInput) { i.Sem = "9" },
-		"sem word":      func(i *InitInput) { i.Sem = "five" },
 	}
 	for name, mut := range bad {
 		h := newHarness()

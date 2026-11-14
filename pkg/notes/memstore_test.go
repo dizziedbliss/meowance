@@ -17,7 +17,7 @@ func TestMemStoreRoundTrip(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	u := Upload{NoteID: "n1", MIME: "application/pdf", Size: 5, Origin: "o", Dept: "AI", Sem: "5", Code: "23AI501"}
+	u := Upload{NoteID: "n1", MIME: "application/pdf", Size: 5, Origin: "o", Code: "23AI501"}
 	session, err := m.NewUpload(context.Background(), u)
 	if err != nil || session != "http://localhost:8787/api/dev-upload/n1" {
 		t.Fatalf("NewUpload = %q, %v", session, err)

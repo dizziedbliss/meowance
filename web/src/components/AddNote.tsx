@@ -1,18 +1,27 @@
-import { useRef, useState } from "react";
-import { checkFile, NotesError, notesErrorCopy, type Note, uploadNote } from "../lib/notes";
+import { useEffect, useRef, useState } from "react";
+import { checkFile, NotesError, notesErrorCopy, type Note, uploadLine, type UploadStage, uploadNote } from "../lib/notes";
 import { field } from "./field";
 
-type Props = { code: string; defaultSem: string; onDone: (n: Note) => void };
+type Props = { code: string; other: boolean; onDone: (n: Note) => void };
 
-/** The "add a note" form: a title, a semester, one file. The file goes straight to storage. */
-export function AddNote({ code, defaultSem, onDone }: Props) {
+/** The "drop a note" form: a title and one file, posted to the course that's open. The file goes straight to storage. */
+export function AddNote({ code, other, onDone }: Props) {
   const [title, setTitle] = useState("");
-  const [sem, setSem] = useState(defaultSem || "5");
   const [file, setFile] = useState<File | null>(null);
   const [fileErr, setFileErr] = useState<string | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
+  const [stage, setStage] = useState<UploadStage | null>(null); // null = not uploading
+  const [tick, setTick] = useState(0);
   const [err, setErr] = useState<string | null>(null);
   const picker = useRef<HTMLInputElement>(null);
+  const busy = stage !== null;
+  const ready = !!file && !fileErr && !!title.trim();
+
+  // like the login button: while it checks it's you, a new line every 1.6s (the last one stays)
+  useEffect(() => {
+    if (stage?.stage !== "check") return setTick(0);
+    const id = setInterval(() => setTick((t) => t + 1), 1600);
+    return () => clearInterval(id);
+  }, [stage?.stage]);
 
   function pick(f: File | null) {
     setFile(f);
@@ -21,85 +30,73 @@ export function AddNote({ code, defaultSem, onDone }: Props) {
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    if (!file || fileErr || !title.trim() || busy) return;
+    if (!file || !ready || busy) return;
     setErr(null);
-    setBusy("checking it's you…");
+    setStage({ stage: "check" });
     try {
-      const note = await uploadNote(file, { title: title.trim(), code, sem }, (f) => setBusy(`sending… ${Math.round(f * 100)}%`));
-      onDone(note);
+      onDone(await uploadNote(file, { title: title.trim(), code }, setStage));
     } catch (x) {
-      setErr(x instanceof NotesError ? notesErrorCopy[x.code] : notesErrorCopy.internal);
-      setBusy(null);
+      setErr(notesErrorCopy[x instanceof NotesError ? x.code : "internal"]);
+      setStage(null);
     }
   }
 
   return (
-    <form onSubmit={submit} className="grid gap-4 border-b border-hair py-5 md:max-w-[560px]" aria-label="Add a note">
+    <form onSubmit={submit} className="grid gap-4 border-b border-hair py-5 md:max-w-[560px]" aria-label="Drop a note">
+      <p className="font-mono text-xs text-ink-2">
+        dropping this in <b className="font-medium text-orange">{code.toLowerCase()}</b>
+        {other && <span className="text-mut"> · diff sem or branch? totally fine, it goes under that course code</span>}
+      </p>
       <div>
         <label htmlFor="note-title" className="mb-1.5 block font-mono text-xs text-ink-2">
-          title · what is it?
+          what's it called
         </label>
+        <input id="note-title" value={title} maxLength={80} onChange={(e) => setTitle(e.target.value)} placeholder="unit 3 handwritten, neat i swear" className={field} disabled={busy} />
+      </div>
+      <div>
+        <span className="mb-1.5 block font-mono text-xs text-ink-2">the file · pdf, png or jpg, 25 mb max</span>
         <input
-          id="note-title"
-          value={title}
-          maxLength={80}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="unit 3 handwritten, neat i swear"
-          className={field}
-          disabled={!!busy}
+          ref={picker}
+          id="note-file"
+          type="file"
+          accept="application/pdf,image/png,image/jpeg"
+          className="sr-only"
+          onChange={(e) => pick(e.target.files?.[0] ?? null)}
+          disabled={busy}
         />
+        <button
+          type="button"
+          onClick={() => picker.current?.click()}
+          disabled={busy}
+          className={`${field} truncate text-left ${file ? "text-ink" : "text-[#8a6a4a]"}`}
+          aria-describedby="note-file-help"
+        >
+          {file ? file.name : "pick a file…"}
+        </button>
+        <p id="note-file-help" role={fileErr ? "alert" : undefined} className={`mt-1.5 font-mono text-xs ${fileErr ? "text-dead" : "text-mut"}`}>
+          {fileErr ?? "ur name stays hidden, u just show up as a random label lol"}
+        </p>
       </div>
-      <div className="flex flex-wrap gap-4">
-        <div>
-          <label htmlFor="note-sem" className="mb-1.5 block font-mono text-xs text-ink-2">
-            sem
-          </label>
-          <select id="note-sem" value={sem} onChange={(e) => setSem(e.target.value)} className={`${field} w-24`} disabled={!!busy}>
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
-              <option key={n} value={String(n)}>
-                {n}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="min-w-0 flex-1">
-          <span className="mb-1.5 block font-mono text-xs text-ink-2">file · pdf, png or jpg, up to 25 mb</span>
-          <input
-            ref={picker}
-            id="note-file"
-            type="file"
-            accept="application/pdf,image/png,image/jpeg"
-            className="sr-only"
-            onChange={(e) => pick(e.target.files?.[0] ?? null)}
-            disabled={!!busy}
-          />
-          <button
-            type="button"
-            onClick={() => picker.current?.click()}
-            disabled={!!busy}
-            className={`${field} truncate text-left ${file ? "text-ink" : "text-[#8a6a4a]"}`}
-            aria-describedby="note-file-help"
-          >
-            {file ? file.name : "choose a file…"}
-          </button>
-          <p id="note-file-help" role={fileErr ? "alert" : undefined} className={`mt-1.5 font-mono text-xs ${fileErr ? "text-dead" : "text-mut"}`}>
-            {fileErr ?? "labels, not names: nobody sees who posted it."}
-          </p>
-        </div>
-      </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+      <div>
         <button
           type="submit"
-          disabled={!file || !!fileErr || !title.trim() || !!busy}
-          className="border border-orange px-5 py-2.5 font-mono text-sm text-orange hover:bg-orange hover:text-on-slab disabled:cursor-not-allowed disabled:border-hair-2 disabled:text-mut disabled:hover:bg-transparent"
+          disabled={!ready || busy}
+          aria-busy={busy}
+          className={`group relative flex w-full items-center justify-between gap-3 overflow-hidden px-5 py-3.5 font-display text-lg font-extrabold tracking-[-.01em] transition-colors md:w-64 ${
+            busy
+              ? "busy cursor-wait bg-orange text-[#140b00]"
+              : ready
+                ? "bg-orange text-[#140b00] hover:bg-orange-hi"
+                : "cursor-not-allowed bg-hair text-mut"
+          }`}
         >
-          {busy ?? "post it"}
+          <span aria-live="polite">{stage ? uploadLine(stage, tick) : "post it"}</span>
+          <span className={`font-mono font-medium transition-transform ${busy ? "nudge" : ready ? "group-hover:translate-x-1.5" : ""}`}>→</span>
+          {busy && <i aria-hidden className="sweep" />}
         </button>
-        {err && (
-          <p role="alert" className="font-mono text-xs text-dead">
-            {err}
-          </p>
-        )}
+        <p role="alert" className="mt-2 min-h-4 font-mono text-xs text-dead">
+          {err}
+        </p>
       </div>
     </form>
   );

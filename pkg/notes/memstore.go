@@ -7,12 +7,15 @@ import (
 	"net/http"
 	"strings"
 	"sync"
+	"time"
 )
 
 // MemStore is a Store that keeps files in memory, for the local dev server and
 // tests. Routes serves the "browser uploads straight to the store" PUT and the file
 // links, so the whole notes flow can be tried offline. Never production.
 type MemStore struct {
+	// Delay makes an upload feel like a real round trip (dev server only), so the screens' progress can be seen.
+	Delay time.Duration
 	base  string // where the dev server listens, e.g. http://localhost:8787
 	mu    sync.Mutex
 	files map[string]memFile // keyed by note id
@@ -77,6 +80,7 @@ func (m *MemStore) Routes(mux *http.ServeMux) {
 			http.Error(w, "bad upload", http.StatusBadRequest)
 			return
 		}
+		time.Sleep(m.Delay)
 		data, err := io.ReadAll(io.LimitReader(r.Body, MaxFileSize+1))
 		if err != nil || len(data) > MaxFileSize {
 			http.Error(w, "too big", http.StatusRequestEntityTooLarge)

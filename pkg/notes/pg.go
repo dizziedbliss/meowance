@@ -70,9 +70,9 @@ func (p *PG) CreateWithin(ctx context.Context, n Note, since time.Time, max int)
 	if have >= max {
 		return false, nil
 	}
-	if _, err := tx.Exec(ctx, `insert into notes (id, code, dept, sem, title, storage, file_key, mime, size, uploader, status, created_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		n.ID, n.Code, n.Dept, n.Sem, n.Title, n.Storage, n.FileKey, n.MIME, n.Size, n.Uploader, n.Status, n.Created); err != nil {
+	if _, err := tx.Exec(ctx, `insert into notes (id, code, dept, title, storage, file_key, mime, size, uploader, status, created_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+		n.ID, n.Code, n.Dept, n.Title, n.Storage, n.FileKey, n.MIME, n.Size, n.Uploader, n.Status, n.Created); err != nil {
 		return false, err
 	}
 	return true, tx.Commit(ctx)
@@ -103,12 +103,12 @@ func (p *PG) Delete(ctx context.Context, id string) error {
 	return err
 }
 
-const noteCols = `id, code, dept, sem, title, storage, file_key, mime, size, uploader, status, created_at,
+const noteCols = `id, code, dept, title, storage, file_key, mime, size, uploader, status, created_at,
 	(select count(*) from votes v where v.note_id = notes.id)`
 
 func scanNote(row pgx.Row) (Note, error) {
 	var n Note
-	err := row.Scan(&n.ID, &n.Code, &n.Dept, &n.Sem, &n.Title, &n.Storage, &n.FileKey, &n.MIME, &n.Size, &n.Uploader, &n.Status, &n.Created, &n.Votes)
+	err := row.Scan(&n.ID, &n.Code, &n.Dept, &n.Title, &n.Storage, &n.FileKey, &n.MIME, &n.Size, &n.Uploader, &n.Status, &n.Created, &n.Votes)
 	return n, err
 }
 

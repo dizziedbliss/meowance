@@ -19,7 +19,7 @@ import (
 //
 //	NOTES_LIVE=1 GOOGLE_CLIENT_ID=... GOOGLE_CLIENT_SECRET=... GOOGLE_REFRESH_TOKEN=... go test ./pkg/notes -run Live -v
 //
-// It uploads a tiny PDF into meowance/notes/ZZ/0/LIVETEST, checks the public link,
+// It uploads a tiny PDF into meowance/notes/LIVETEST, checks the public link,
 // then deletes the file (the empty folders stay).
 func TestDriveLive(t *testing.T) {
 	d := DriveFromEnv()
@@ -33,7 +33,7 @@ func TestDriveLive(t *testing.T) {
 	rand.Read(b)
 	pdf := []byte("%PDF-1.4\n% meowance live test " + hex.EncodeToString(b) + "\n%%EOF\n")
 	u := Upload{NoteID: "live" + hex.EncodeToString(b), MIME: "application/pdf", Size: int64(len(pdf)),
-		Origin: "https://meowance.vercel.app", Dept: "ZZ", Sem: "0", Code: "LIVETEST"}
+		Origin: "https://meowance.vercel.app", Code: "LIVETEST"}
 
 	session, err := d.NewUpload(ctx, u)
 	if err != nil {

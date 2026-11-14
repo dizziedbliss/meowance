@@ -3,7 +3,6 @@ create table if not exists notes (
   id         text primary key,
   code       text   not null,
   dept       text   not null,
-  sem        text   not null,
   title      text   not null,
   storage    text   not null,
   file_key   text   not null default '',

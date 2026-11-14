@@ -120,7 +120,7 @@ func (f *fakeDrive) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 func up() Upload {
-	return Upload{NoteID: "n1a2b3", MIME: "application/pdf", Size: 1234, Origin: "https://meowance.vercel.app", Dept: "AI", Sem: "5", Code: "23AI501"}
+	return Upload{NoteID: "n1a2b3", MIME: "application/pdf", Size: 1234, Origin: "https://meowance.vercel.app", Code: "23AI501"}
 }
 
 // land puts a file where the browser upload would have, in the folder the store made.
@@ -144,8 +144,8 @@ func TestNewUploadMakesTheFoldersOnceAndOpensASession(t *testing.T) {
 	if err != nil || uri != "https://upload.example/session?upload_id=abc" {
 		t.Fatalf("NewUpload = %q, %v", uri, err)
 	}
-	if f.creates != 5 { // meowance / notes / AI / 5 / 23AI501
-		t.Errorf("made %d folders, want 5", f.creates)
+	if f.creates != 3 { // meowance / notes / 23AI501
+		t.Errorf("made %d folders, want 3", f.creates)
 	}
 	if got := f.lastInit.Get("Origin"); got != "https://meowance.vercel.app" {
 		t.Errorf("Origin = %q: the browser could not PUT to the session", got)
@@ -162,7 +162,7 @@ func TestNewUploadMakesTheFoldersOnceAndOpensASession(t *testing.T) {
 	if _, err := d.NewUpload(context.Background(), u2); err != nil {
 		t.Fatal(err)
 	}
-	if f.creates != 5 {
+	if f.creates != 3 {
 		t.Errorf("second upload made folders again: %d", f.creates)
 	}
 }
@@ -178,8 +178,8 @@ func TestFindsFoldersThatAlreadyExistInDrive(t *testing.T) {
 	if _, err := d2.NewUpload(context.Background(), up()); err != nil {
 		t.Fatal(err)
 	}
-	if f.creates != 5 {
-		t.Errorf("cold instance made %d folders, want to reuse the 5", f.creates)
+	if f.creates != 3 {
+		t.Errorf("cold instance made %d folders, want to reuse the 3", f.creates)
 	}
 }
 
@@ -212,7 +212,6 @@ func TestNewUploadRefusesBadUploadsBeforeCallingDrive(t *testing.T) {
 		"mime":        func(u *Upload) { u.MIME = "application/x-msdownload" },
 		"note id":     func(u *Upload) { u.NoteID = "../x" },
 		"folder name": func(u *Upload) { u.Code = "x' or 'a'='a" },
-		"empty dept":  func(u *Upload) { u.Dept = "" },
 		"origin":      func(u *Upload) { u.Origin = "" },
 	}
 	for name, mut := range bad {
@@ -248,7 +247,7 @@ func TestFinishRejectsFilesThatAreNotTheUpload(t *testing.T) {
 		"someone else's file name": f.land(t, d, up(), "other.pdf", "application/pdf", 1234),
 		"wrong type":               f.land(t, d, up(), "n1a2b3.pdf", "text/html", 1234),
 		"bigger than announced":    f.land(t, d, up(), "n1a2b3.pdf", "application/pdf", 9999),
-		"over the cap":             f.land(t, d, Upload{NoteID: "x", MIME: "application/pdf", Size: 1, Origin: "o", Dept: "AI", Sem: "5", Code: "23AI501"}, "n1a2b3.pdf", "application/pdf", MaxFileSize+1),
+		"over the cap":             f.land(t, d, Upload{NoteID: "x", MIME: "application/pdf", Size: 1, Origin: "o", Code: "23AI501"}, "n1a2b3.pdf", "application/pdf", MaxFileSize+1),
 	}
 	// a file with the right name but in some other folder
 	other := up()

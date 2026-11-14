@@ -55,8 +55,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - **Notes sharing** (`pkg/notes`, `pkg/api/notes.go`, `api/notes/index.go`, web `lib/notes.ts` +
   `components/Notes.tsx`): students share note files per course. A portal-verified login (`POST login`)
   returns a 7-day HMAC token (`NOTES_TOKEN_SECRET`) so posting works when the portal sleeps. Files live in
-  Max's Google Drive (`drive.file` scope, OAuth refresh token in `GOOGLE_*` env, folders
-  `meowance/notes/<dept>/<sem>/<course>/`); the browser uploads straight to a Drive session URL (Vercel
+  Max's Google Drive (`drive.file` scope, OAuth refresh token in `GOOGLE_*` env, one folder per
+  course: `meowance/notes/<course>/`, since a course code already says its sem and branch; anyone can
+  upload to any course code, including other branches'); the browser uploads straight to a Drive session URL (Vercel
   caps bodies at 4.5 MB, hence the `connect-src https://www.googleapis.com`). Students only see our
   `/api/notes?file=<id>` link, which redirects to the store, so the files can move to another account or
   backend without breaking links (`Store` interface: Drive, MemStore for dev). Rows (notes, votes, reports)
@@ -86,7 +87,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
   screen, bottom nav is a background-less overlay over the dark fade, labels split by hairlines, active tab underlined in orange (Max rejected a solid bar: "ew"). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
-  (pawsent, lives, purring). Max's own logos in `web/public/brand/`; never the college crest, never
+  (pawsent, lives, purring). **Write it the way Max talks**: u / ur / n / rn / tmrw / w, drawn-out vowels
+  ("donneeee"), "heh", "lol", like his changelog posts in `data/board.ts`. Never polished-English lines
+  ("nobody sees who posted it" got an "ewwww"). When unsure, copy the tone of the login errors. Max's own logos in `web/public/brand/`; never the college crest, never
   student or lecturer photos. Dept = the 2 letters in the USN.
 - Credentials are never stored server-side or logged. Test fixtures are **mock data**: real page layouts, but
   every personal value invented (USN `4MC00AA000`, `STUDENT`, lecturers `FACULTY`, the generic

@@ -8,8 +8,8 @@ import {
   notesErrorCopy,
   normCode,
   saveToken,
-  semFrom,
   sizeLabel,
+  uploadLine,
   vote,
 } from "./notes";
 
@@ -45,11 +45,21 @@ describe("small helpers", () => {
     expect(sizeLabel(1.5 * 1024 * 1024)).toBe("1.5 mb");
   });
   it("normCode upper-cases and trims", () => expect(normCode("  23ai501 ")).toBe("23AI501"));
-  it("semFrom reads the portal's sem", () => {
-    expect(semFrom("07")).toBe("7");
-    expect(semFrom("5")).toBe("5");
-    expect(semFrom("")).toBe("");
-    expect(semFrom("09")).toBe(""); // only 1-8 exist
+});
+
+describe("uploadLine (what the post button says while it works)", () => {
+  it("rotates while it checks it's you, and the last line sticks", () => {
+    const lines = [0, 1, 2, 3, 9].map((t) => uploadLine({ stage: "check" }, t));
+    expect(new Set(lines).size).toBe(3);
+    expect(lines[3]).toBe(lines[2]);
+    expect(lines[4]).toBe(lines[2]);
+  });
+  it("shows the percent while the file goes up", () => {
+    expect(uploadLine({ stage: "send", frac: 0.426 }, 0)).toBe("uploading… 43%");
+    expect(uploadLine({ stage: "send", frac: 1 }, 5)).toBe("uploading… 100%");
+  });
+  it("says something while the server checks the file", () => {
+    expect(uploadLine({ stage: "publish" }, 0)).toMatch(/official/);
   });
 });
 

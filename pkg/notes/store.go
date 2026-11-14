@@ -31,9 +31,7 @@ type Upload struct {
 	MIME   string
 	Size   int64
 	Origin string // the page's origin, so the browser is allowed to send to the session
-	Dept   string // 2 letters from the USN, e.g. "AI"
-	Sem    string
-	Code   string // course code, e.g. "23AI501"
+	Code   string // course code, e.g. "23AI501": one folder per course (a course belongs to one sem)
 }
 
 // Stored is a file that has landed and been checked.
@@ -68,7 +66,7 @@ func (u Upload) check() error {
 		return errBad("file size")
 	case !idPattern.MatchString(u.NoteID):
 		return errBad("note id")
-	case !idPattern.MatchString(u.Dept), !idPattern.MatchString(u.Sem), !idPattern.MatchString(u.Code):
+	case !idPattern.MatchString(u.Code):
 		return errBad("course")
 	}
 	return nil

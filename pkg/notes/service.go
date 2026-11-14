@@ -26,13 +26,13 @@ var courseCode = regexp.MustCompile(`^[A-Z0-9]{3,12}$`)
 
 // Note is one row of notes sharing. Uploader is the USN and never leaves the server.
 type Note struct {
-	ID, Code, Dept, Sem, Title string
-	Storage, FileKey, MIME     string
-	Uploader                   string
-	Status                     string // "pending" until the file is checked, then "live"
-	Size                       int64
-	Created                    time.Time
-	Votes                      int
+	ID, Code, Dept, Title  string
+	Storage, FileKey, MIME string
+	Uploader               string
+	Status                 string // "pending" until the file is checked, then "live"
+	Size                   int64
+	Created                time.Time
+	Votes                  int
 }
 
 // Repo is where note rows live (Postgres in production, memory in tests).
@@ -68,9 +68,9 @@ type Service struct {
 
 // InitInput is what a student announces before uploading.
 type InitInput struct {
-	Title, Code, Sem, MIME string
-	Size                   int64
-	Origin                 string
+	Title, Code, MIME string
+	Size              int64
+	Origin            string
 }
 
 type InitResult struct{ NoteID, Session string }
@@ -121,11 +121,8 @@ func (s *Service) Init(ctx context.Context, usn string, in InitInput) (InitResul
 	if !courseCode.MatchString(code) {
 		return InitResult{}, fmt.Errorf("%w: course code", ErrBadInput)
 	}
-	if len(in.Sem) != 1 || in.Sem < "1" || in.Sem > "8" {
-		return InitResult{}, fmt.Errorf("%w: semester", ErrBadInput)
-	}
 	id := s.newID()
-	up := Upload{NoteID: id, MIME: in.MIME, Size: in.Size, Origin: in.Origin, Dept: dept, Sem: in.Sem, Code: code}
+	up := Upload{NoteID: id, MIME: in.MIME, Size: in.Size, Origin: in.Origin, Code: code}
 	if err := up.check(); err != nil {
 		return InitResult{}, fmt.Errorf("%w: %v", ErrBadInput, err)
 	}
@@ -133,7 +130,7 @@ func (s *Service) Init(ctx context.Context, usn string, in InitInput) (InitResul
 		return InitResult{}, fmt.Errorf("%w: origin", ErrBadInput)
 	}
 	now := s.now()
-	note := Note{ID: id, Code: code, Dept: dept, Sem: in.Sem, Title: title, Storage: "gdrive",
+	note := Note{ID: id, Code: code, Dept: dept, Title: title, Storage: "gdrive",
 		MIME: in.MIME, Size: in.Size, Uploader: usn, Status: "pending", Created: now}
 	created, err := s.Repo.CreateWithin(ctx, note, now.Add(-24*time.Hour), DailyUploads)
 	if err != nil {
@@ -164,7 +161,7 @@ func (s *Service) Commit(ctx context.Context, usn, id, key string) (Note, error)
 	if n.Uploader != usn {
 		return Note{}, ErrNotYours
 	}
-	up := Upload{NoteID: n.ID, MIME: n.MIME, Size: n.Size, Dept: n.Dept, Sem: n.Sem, Code: n.Code}
+	up := Upload{NoteID: n.ID, MIME: n.MIME, Size: n.Size, Code: n.Code}
 	stored, err := s.Store.Finish(ctx, up, key)
 	if err != nil {
 		if errors.Is(err, ErrRejected) {

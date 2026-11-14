@@ -8,7 +8,6 @@ import {
   notesErrorCopy,
   rememberVote,
   report,
-  semFrom,
   sizeLabel,
   validCode,
   vote,
@@ -78,7 +77,7 @@ export function Notes({ data }: { data: Attendance }) {
     if (!reason.trim()) return;
     try {
       await report(id, reason.trim());
-      setMsg({ text: "sent. max will look at it.", bad: false });
+      setMsg({ text: "sent. max will check it.", bad: false });
       setReporting(null);
       setReason("");
     } catch (x) {
@@ -92,7 +91,7 @@ export function Notes({ data }: { data: Attendance }) {
         <h2 className="numeral text-[clamp(64px,11vw,128px)] leading-[.8] tracking-[-.03em]">
           notes<span className="text-orange">.</span>
         </h2>
-        <p className="mt-4 font-mono text-xs text-mut">shared by students, for students. labels, not names.</p>
+        <p className="mt-4 font-mono text-xs text-mut">Hello padakhu bacchon :")</p>
         <SubTabs
           label="Course"
           className="mt-4"
@@ -104,6 +103,7 @@ export function Notes({ data }: { data: Attendance }) {
 
       {tab === "other" && (
         <div className="border-b border-hair py-4">
+          <p className="mb-3 max-w-[60ch] font-mono text-xs text-mut">looking for a diff sem or branch? type the course code. got notes for it? drop em, helps everyone heh</p>
           <label htmlFor="other-code" className="mb-1.5 block font-mono text-xs text-ink-2">
             course code · like 23ai501
           </label>
@@ -117,34 +117,34 @@ export function Notes({ data }: { data: Attendance }) {
             {list === null ? (loadErr ? "—" : "digging up notes…") : `${list.length} ${list.length === 1 ? "note" : "notes"}`} · {code.toLowerCase()}
           </span>
           <button type="button" onClick={() => setAdding((a) => !a)} className="font-mono text-xs text-orange underline-offset-4 hover:underline" aria-expanded={adding}>
-            {adding ? "never mind" : "+ add a note"}
+            {adding ? "never mind" : "+ drop a note"}
           </button>
         </div>
       )}
 
       <p role="status" className={`font-mono text-xs ${msg ? `pt-3 ${msg.bad ? "text-dead" : "text-safe"}` : ""}`}>
         {msg?.text}
-      </p>
+       </p>
 
       {adding && ok && (
         <AddNote
           code={code}
-          defaultSem={semFrom(data.student.sem)}
+          other={tab === "other"}
           onDone={(n) => {
             setAdding(false);
             setList((l) => [n, ...(l ?? [])]);
-            setMsg({ text: "posted. you're basically a topper now.", bad: false });
+            setMsg({ text: "posted!! ur basically a topper now heh", bad: false });
           }}
         />
       )}
 
-      {!ok && tab === "other" && <p className="mt-6 font-display text-2xl font-bold text-ink-2">type a course code up there.</p>}
+      {!ok && tab === "other" && <p className="mt-6 font-display text-2xl font-bold text-ink-2">type the course code up there ↑</p>}
       {loadErr && (
         <p role="alert" className="mt-6 font-display text-2xl font-bold text-ink-2">
           {loadErr}
         </p>
       )}
-      {list && list.length === 0 && !adding && <p className="mt-6 max-w-[44ch] font-display text-2xl font-bold leading-tight text-ink-2">no notes for this one yet. be the hero.</p>}
+      {list && list.length === 0 && !adding && <p className="mt-6 max-w-[44ch] font-display text-2xl font-bold leading-tight text-ink-2">nothing here yet. be the hero.</p>}
 
       <ul>
         {(list ?? []).map((n) => (
@@ -176,7 +176,7 @@ export function Notes({ data }: { data: Attendance }) {
                 <label htmlFor={`why-${n.id}`} className="sr-only">
                   why are you reporting this?
                 </label>
-                <input id={`why-${n.id}`} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="what's wrong with it?" className={`${field} min-w-0 flex-1`} />
+                <input id={`why-${n.id}`} value={reason} maxLength={300} onChange={(e) => setReason(e.target.value)} placeholder="what's wrong w it?" className={`${field} min-w-0 flex-1`} />
                 <button type="submit" disabled={!reason.trim()} className="border border-hair-2 px-4 py-2.5 font-mono text-xs text-ink-2 hover:text-ink disabled:text-mut">
                   send
                 </button>

@@ -25,23 +25,23 @@ export class NotesError extends Error {
   }
 }
 
-/** What to tell the student for each failure. */
+/** What to tell the student for each failure. Written like Max talks: u, ur, n, rn. */
 export const notesErrorCopy: Record<NotesErrorCode, string> = {
-  bad_input: "something in that doesn't look right. check the title, course and file.",
-  bad_login: "portal said nope. log out and back in, then try again.",
-  too_many_tries: "too many wrong tries for that usn. take 15 minutes.",
-  portal_down: "the portal's asleep, so we can't check it's you right now. try in a bit.",
-  portal_changed: "the portal changed its look and we can't read it rn. we're on it.",
-  portal_blocked: "the portal's blocking us rn. try again later.",
-  internal: "something broke on our side. try again.",
-  network: "you're offline, or we are. try again.",
-  bad_token: "lost your login. log out and back in, then try again.",
+  bad_input: "something's off with the title or the file. check it?",
+  bad_login: "portal said nope. log out n back in, then try again.",
+  too_many_tries: "too many wrong tries for that usn. chill for 15 min.",
+  portal_down: "portal's asleep again, can't check it's u rn. try in a bit.",
+  portal_changed: "portal changed its look n we can't read it rn. fixing it.",
+  portal_blocked: "the portal's blocking us rn. try later.",
+  internal: "we broke something. try again.",
+  network: "ur offline, or we are. try again.",
+  bad_token: "lost ur login. log out n back in, then try again.",
   not_found: "that note's gone. someone took it down, or it never made it.",
-  forbidden: "that's not yours to touch.",
-  rejected: "the upload didn't match what you announced, so it got binned. try again.",
-  too_many_uploads: "5 notes a day is the limit. go touch grass, come back tomorrow.",
-  notes_off: "notes are off right now. check back soon.",
-  storage_error: "the file storage hiccuped. try again in a minute.",
+  forbidden: "not urs to touch.",
+  rejected: "the upload didn't match what u said, so it got binned. try again.",
+  too_many_uploads: "5 notes a day is the limit. go touch grass, come back tmrw.",
+  notes_off: "notes are off rn. check back soon.",
+  storage_error: "file storage hiccuped. try again in a min.",
 };
 
 export const MAX_FILE = 25 * 1024 * 1024;
@@ -49,8 +49,8 @@ const TYPES = ["application/pdf", "image/png", "image/jpeg"];
 
 /** Why a file can't be uploaded, or null when it can. */
 export function checkFile(f: { type: string; size: number }): string | null {
-  if (!TYPES.includes(f.type)) return "pdf, png or jpg only.";
-  if (f.size <= 0) return "that file's empty.";
+  if (!TYPES.includes(f.type)) return "pdf, png or jpg only bro.";
+  if (f.size <= 0) return "that file's empty lol.";
   if (f.size > MAX_FILE) return "25 mb max. squish it or split it.";
   return null;
 }
@@ -63,12 +63,6 @@ export function sizeLabel(bytes: number): string {
 
 export const normCode = (s: string) => s.trim().toUpperCase();
 export const validCode = (s: string) => /^[A-Z0-9]{3,12}$/.test(normCode(s));
-
-/** The portal's "07" → "7"; "" when it isn't a sem from 1 to 8. */
-export function semFrom(sem: string): string {
-  const n = Number(sem.replace(/\D/g, ""));
-  return n >= 1 && n <= 8 ? String(n) : "";
-}
 
 // ---- the 7-day token: kept in this browser, wiped on logout ----
 
@@ -187,16 +181,30 @@ function putFile(session: string, file: File, onProgress: (frac: number) => void
   });
 }
 
-export type NewNote = { title: string; code: string; sem: string };
+export type NewNote = { title: string; code: string };
+
+/** Where an upload is at, for the post button. */
+export type UploadStage = { stage: "check" } | { stage: "send"; frac: number } | { stage: "publish" };
+
+const CHECK_LINES = ["checking it's u…", "asking the portal nicely…", "portal's being slow, hold on…"];
+
+/** What the post button says: lines rotate while the portal checks it's you (the last one sticks), then the percent. */
+export function uploadLine(s: UploadStage, tick: number): string {
+  if (s.stage === "send") return `uploading… ${Math.round(s.frac * 100)}%`;
+  if (s.stage === "publish") return "making it official…";
+  return CHECK_LINES[Math.min(tick, CHECK_LINES.length - 1)];
+}
 
 /** The whole upload: announce it, send the file, then ask the server to check and publish it. */
-export async function uploadNote(file: File, meta: NewNote, onProgress: (frac: number) => void = () => {}): Promise<Note> {
-  const why = checkFile(file);
-  if (why) throw new NotesError("bad_input");
+export async function uploadNote(file: File, meta: NewNote, onStage: (s: UploadStage) => void = () => {}): Promise<Note> {
+  if (checkFile(file)) throw new NotesError("bad_input");
+  onStage({ stage: "check" });
   const started = await withToken((t) =>
-    post<{ noteId: string; session: string }>({ action: "init", title: meta.title, code: normCode(meta.code), sem: meta.sem, mime: file.type, size: file.size }, t),
+    post<{ noteId: string; session: string }>({ action: "init", title: meta.title, code: normCode(meta.code), mime: file.type, size: file.size }, t),
   );
-  const key = await putFile(started.session, file, onProgress);
+  onStage({ stage: "send", frac: 0 });
+  const key = await putFile(started.session, file, (frac) => onStage({ stage: "send", frac }));
+  onStage({ stage: "publish" });
   const done = await withToken((t) => post<{ note: Note }>({ action: "commit", noteId: started.noteId, key }, t));
   return done.note;
 }
