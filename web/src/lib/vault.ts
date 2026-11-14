@@ -12,6 +12,9 @@ const STORE = "keys";
 const KEY_ID = "creds";
 const CREDS = "meowance.creds";
 const DATA = "meowance.data";
+/** Notes sharing: the 7-day token and the notes this student upvoted. Wiped on logout like the rest. */
+export const NOTES_TOKEN = "meowance.notes.token";
+export const NOTES_VOTED = "meowance.notes.voted";
 
 export type Creds = { usn: string; dob: string };
 
@@ -80,11 +83,13 @@ export function loadData(): Stored | null {
   }
 }
 
-/** Logout: wipe creds, cached attendance and the key. */
+/** Logout: wipe creds, cached attendance, the notes token and the key. */
 export async function wipe(): Promise<void> {
   try {
     localStorage.removeItem(CREDS);
     localStorage.removeItem(DATA);
+    localStorage.removeItem(NOTES_TOKEN);
+    localStorage.removeItem(NOTES_VOTED);
   } catch {
     /* ignore */
   }

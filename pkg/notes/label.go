@@ -6,7 +6,7 @@ import (
 )
 
 // labelPool is what a note's uploader is called instead of their name. {dept}
-// becomes the 2-letter department from the USN, in lowercase.
+// becomes the 2-letter department from the USN, in lowercase; {a} becomes "a" or "an" to suit it.
 var labelPool = []string{
 	"a very nice {dept} kid",
 	"just another nerd",
@@ -14,16 +14,16 @@ var labelPool = []string{
 	"a suspiciously organised {dept} student",
 	"someone who touched grass once",
 	"the back bench legend",
-	"a {dept} kid with colour-coded notes",
+	"{a} {dept} kid with colour-coded notes",
 	"your friendly neighbourhood topper",
 	"a sleep-deprived {dept} student",
 	"a bunker turned good samaritan",
 	"the one who always has a pen",
-	"a {dept} kid at 3am",
+	"{a} {dept} kid at 3am",
 	"probably a topper",
 	"a mysterious cat person",
 	"CR's best friend",
-	"a {dept} student who actually attended",
+	"{a} {dept} student who actually attended",
 }
 
 // Label picks a note's anonymous uploader label. It depends only on the note's
@@ -37,5 +37,14 @@ func Label(noteID, dept string) string {
 	if dept == "" {
 		dept = "mce"
 	}
-	return strings.ReplaceAll(l, "{dept}", dept)
+	return strings.ReplaceAll(strings.ReplaceAll(l, "{a}", article(dept)), "{dept}", dept)
+}
+
+// article is "an" when a dept, read out letter by letter, starts with a vowel sound
+// (ai = ay-eye, me = em-ee), and "a" otherwise (cs = see-ess).
+func article(dept string) string {
+	if dept != "" && strings.ContainsRune("aefhilmnorsx", rune(dept[0])) {
+		return "an"
+	}
+	return "a"
 }

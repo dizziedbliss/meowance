@@ -168,8 +168,10 @@ func (f *loginFail) write(w http.ResponseWriter) {
 	writeErr(w, f.status, f.code)
 }
 
-// portalLogin logs a student in to the portal behind the brute-force guard; both the
-// attendance and the notes endpoints use it, so a birthday can't be guessed through either.
+// portalLogin logs a student in to the portal behind the brute-force guard. The attendance
+// and notes endpoints both use it (same rules), but they are separate Vercel functions, so each
+// warm instance of each keeps its own in-memory counts: a speed bump, not a shared budget.
+// The Vercel firewall's per-IP rate limit on both paths is the cross-instance limit.
 func portalLogin(r *http.Request, f Fetcher, lim *limiter, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, *loginFail) {
 	// Reserve this attempt before asking the portal. Out of tries for this
 	// USN (from this IP, or overall): refuse without contacting the portal.

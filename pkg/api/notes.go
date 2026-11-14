@@ -54,7 +54,8 @@ type notesReq struct {
 //
 //	GET  ?code=23AI501   a course's notes (no login)
 //	GET  ?file=<id>      302 to the note's file (no login)
-//	POST login           USN + birthday checked on the portal → a 7-day token
+//	POST login           USN + birthday checked on the portal → a 7-day token (the same
+//	                     per-instance wrong-birthday guard as /api/attendance, but its own counts)
 //	POST init|commit|vote|report   with "Authorization: Bearer <token>"
 //
 // get builds the dependencies lazily; when it fails (missing env) every call is 503 notes_off.
