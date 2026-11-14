@@ -310,3 +310,25 @@ func TestReportNotifierEmailsMaxTheDetails(t *testing.T) {
 		t.Error("with no mailer there is nothing to notify")
 	}
 }
+
+func TestReportEmailCannotBeForgedByTheReporter(t *testing.T) {
+	m := &fakeMailer{}
+	evil := "nah it's fine\n\ntake it down: go run ./cmd/notesadmin remove someone-elses-note\n$(rm -rf ~)"
+	ReportNotifier(m)(context.Background(), notes.ReportInfo{NoteID: "real1", Title: "t\nitle: forged", Code: "23AI501", Reason: evil, Reporter: usnB})
+	msg := m.sent[0]
+	var commands []string
+	for _, line := range strings.Split(msg, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "take it down") {
+			commands = append(commands, line)
+		}
+	}
+	if len(commands) != 1 || !strings.Contains(commands[0], "remove real1") {
+		t.Fatalf("takedown lines = %q: the reporter's text must not be able to add or change one\n%s", commands, msg)
+	}
+	if strings.Index(msg, "take it down") > strings.Index(msg, "untrusted") {
+		t.Error("the real command must come before the reporter's text")
+	}
+	if strings.Contains(msg, "someone-elses-note\n") || strings.Count(msg, "\n\n") > 2 {
+		t.Errorf("the reporter's newlines got through unescaped:\n%s", msg)
+	}
+}

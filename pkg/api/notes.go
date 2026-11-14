@@ -28,7 +28,11 @@ func ReportNotifier(m Mailer) func(context.Context, notes.ReportInfo) error {
 		return nil
 	}
 	return func(ctx context.Context, r notes.ReportInfo) error {
-		return m.Send(ctx, r.Reporter, fmt.Sprintf("REPORTED NOTE %s (%q, course %s): %s\n\nto take it down: go run ./cmd/notesadmin remove %s", r.NoteID, r.Title, r.Code, r.Reason, r.NoteID))
+		// The command comes first and from our own data only. Everything after the divider is
+		// student-written, so it is quoted: a reason with newlines can't fake a "take it down" line.
+		return m.Send(ctx, r.Reporter, fmt.Sprintf(
+			"REPORTED NOTE %s\n\ntake it down:  go run ./cmd/notesadmin remove %s\n\n----- untrusted text from the reporter, shown escaped -----\nreporter: %s\ncourse:   %q\ntitle:    %q\nreason:   %q\n",
+			r.NoteID, r.NoteID, r.Reporter, r.Code, r.Title, r.Reason))
 	}
 }
 
