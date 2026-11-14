@@ -1,10 +1,11 @@
 import { shortDate } from "../lib/dates";
-import { partLabel, scoreVerdict, type SeePart, seeMin } from "../lib/scores";
+import { onHandbookScheme, partLabel, scoreVerdict, type SeePart, seeMin } from "../lib/scores";
 import type { Attendance } from "../lib/types";
 import { PastSems } from "./PastSems";
 import { SubTabs } from "./SubTabs";
+import { Target } from "./Target";
 
-export type ScoresView = "now" | "past";
+export type ScoresView = "now" | "past" | "target";
 
 const text = { dead: "text-dead", fine: "text-fine", safe: "text-safe" } as const;
 const fill = { dead: "bg-dead", fine: "bg-fine", safe: "bg-safe" } as const;
@@ -44,6 +45,8 @@ export function Scores({ data, view, onView, loading }: Props) {
             tabs={[
               { id: "now", text: "this sem" },
               { id: "past", text: "past sems" },
+              // the bands and pass marks are the handbook's: later batches' scheme changed
+              ...(onHandbookScheme(data.student.usn) ? [{ id: "target" as const, text: "target" }] : []),
             ]}
             active={view}
             onTab={onView}
@@ -58,6 +61,8 @@ export function Scores({ data, view, onView, loading }: Props) {
 
       {view === "past" ? (
         <PastSems exams={data.exams} loading={loading} />
+      ) : view === "target" ? (
+        <Target data={data} loading={loading} />
       ) : (
       <>
       <p className="mt-4 font-mono text-xs text-mut">cie so far, out of 50 each · see marks come later</p>

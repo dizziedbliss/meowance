@@ -52,7 +52,10 @@ describe("seeMin (seniors: 12 of 30 from 3 cies, 8 of 20 from 2 activities)", ()
     expect(m.cie).toEqual({ got: 5, need: 12, left: 2, status: "open" });
     expect(m.act).toEqual({ got: 7, need: 8, left: 1, status: "open" });
   });
+  it("covers the 24 batch too (the 2024-25 handbook), but not the 25 batch on", () => {
+    expect(seeMin(course([part("SE1", 5)]), "4MC24CI000")).not.toBeNull();
+  });
   it("says nothing for juniors: their scheme changed and isn't known yet", () => {
-    expect(seeMin(course([part("SE1", 5)]), "4MC24CI000")).toBeNull();
+    expect(seeMin(course([part("SE1", 5)]), "4MC25CI000")).toBeNull();
   });
 });

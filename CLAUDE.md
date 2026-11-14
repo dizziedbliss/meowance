@@ -55,7 +55,7 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - **`cmd/devserver`**: same handler locally, optional fixture mode.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
-  zone (bunkable / show up / don't you dare); `lib/scores.ts` the CIE verdicts; `lib/events.ts`
+  zone (bunkable / show up / don't you dare); `lib/scores.ts` the CIE verdicts; `lib/cgpa.ts` the scores → "target" tab (needed SGPA, a grade + see marks per course, a course that tops out low is capped and the others cover for it; the see is shown out of 100, the portal's /50 doubled; the bands and pass rules are the 2024-25 handbook's, so the tab only shows for the 24 batch and older); `lib/events.ts`
   working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats; `lib/cache.ts` which extras are stale (the
   timetable after the week changes, the calendar after 7 days, either after a failed fetch) and
   merges replies into the cache. Login and sync fetch the dashboard only; opening a tab fetches its
@@ -86,7 +86,10 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 
 - Timetable only shows the current week (no previous/next week).
 - The SEE minimum (12 of 30 from the cies, 8 of 20 from the activities; `seeMin` in
-  `lib/scores.ts`) only shows for the 23 batch and older: the juniors' scheme changed and is unknown.
+  `lib/scores.ts`) and the CGPA target only show for the 24 batch and older (`onHandbookScheme`): the
+  25-26 and 26-27 intakes' scheme changed and is unknown.
+- The CGPA target assumes every course's CIE is out of 50 (the portal's `cieMax` is only "usually" 50)
+  and whole-or-half-mark totals; unconfirmed with real data. It has only been run on fixtures.
 - The CIE details page (class averages) is still parsed and fetchable server-side, but the UI
   dropped it (Max: not useful).
 - The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
