@@ -362,7 +362,7 @@ func TestDriveErrorsComeBackAsErrors(t *testing.T) {
 
 func TestLinks(t *testing.T) {
 	_, d := newFake(t)
-	if got, want := d.Link("abc123"), "https://drive.google.com/uc?id=abc123&export=download"; got != want {
+	if got, want := d.Link("abc123"), "https://drive.google.com/file/d/abc123/view"; got != want {
 		t.Errorf("Link = %q, want %q", got, want)
 	}
 	if strings.Contains(d.Link("a b&c"), "a b&c") {

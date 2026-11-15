@@ -95,6 +95,38 @@ func (h *harness) goLive(t *testing.T, owner string) string {
 	return r.NoteID
 }
 
+func TestOnlyTheUploaderDeletes(t *testing.T) {
+	h := newHarness()
+	id := h.goLive(t, usn)
+	if err := h.svc.Delete(context.Background(), "4MC23AI002", id); !errors.Is(err, ErrNotYours) {
+		t.Fatalf("another student: err = %v, want ErrNotYours", err)
+	}
+	if len(h.store.deleted) != 0 || h.repo.notes[id] == nil {
+		t.Fatal("someone else's delete touched the note")
+	}
+	if err := h.svc.Delete(context.Background(), usn, id); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.store.deleted) != 1 || h.repo.notes[id] != nil {
+		t.Errorf("owner delete left file %v / row %v", h.store.deleted, h.repo.notes[id])
+	}
+	if err := h.svc.Delete(context.Background(), usn, id); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleting twice: %v, want ErrNotFound", err)
+	}
+}
+
+func TestUnvoteTakesTheVoteBack(t *testing.T) {
+	h := newHarness()
+	id := h.goLive(t, usn)
+	h.svc.Vote(context.Background(), "4MC23AI002", id)
+	if removed, err := h.svc.Unvote(context.Background(), "4MC23AI002", id); err != nil || !removed {
+		t.Fatalf("Unvote = %v, %v", removed, err)
+	}
+	if n, _ := h.repo.Get(context.Background(), id); n.Votes != 0 {
+		t.Errorf("votes = %d", n.Votes)
+	}
+}
+
 func TestInitOpensAPendingNote(t *testing.T) {
 	h := newHarness()
 	r, err := h.svc.Init(context.Background(), usn, in())

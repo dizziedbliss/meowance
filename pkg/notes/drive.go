@@ -178,7 +178,7 @@ func (d *Drive) Discard(ctx context.Context, u Upload) error {
 }
 
 func (d *Drive) Link(key string) string {
-	return "https://drive.google.com/uc?id=" + url.QueryEscape(key) + "&export=download"
+	return "https://drive.google.com/file/d/" + url.PathEscape(key) + "/view"
 }
 
 func (d *Drive) Delete(ctx context.Context, key string) error {

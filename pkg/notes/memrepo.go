@@ -102,6 +102,29 @@ func (r *memRepo) Vote(_ context.Context, id, usn string) (bool, error) {
 	r.votes[id][usn] = true
 	return true, nil
 }
+func (r *memRepo) Unvote(_ context.Context, id, usn string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	had := r.votes[id][usn]
+	delete(r.votes[id], usn)
+	return had, nil
+}
+func (r *memRepo) Mine(_ context.Context, code, usn string) (mine, voted []string, err error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for id, n := range r.notes {
+		if n.Status != "live" || n.Code != code {
+			continue
+		}
+		if n.Uploader == usn {
+			mine = append(mine, id)
+		}
+		if r.votes[id][usn] {
+			voted = append(voted, id)
+		}
+	}
+	return mine, voted, nil
+}
 func (r *memRepo) RemoveReport(_ context.Context, id, usn string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

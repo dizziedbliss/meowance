@@ -144,7 +144,7 @@ func notesWrite(w http.ResponseWriter, r *http.Request, d *NotesDeps, lim *limit
 		return
 	}
 
-	if !slices.Contains([]string{"init", "commit", "vote", "report"}, req.Action) {
+	if !slices.Contains([]string{"init", "commit", "vote", "unvote", "report", "delete", "mine"}, req.Action) {
 		writeErr(w, http.StatusBadRequest, CodeBadInput)
 		return
 	}
@@ -184,6 +184,30 @@ func notesWrite(w http.ResponseWriter, r *http.Request, d *NotesDeps, lim *limit
 			return
 		}
 		writeJSON(w, map[string]bool{"ok": true, "added": counted}) // added is false for a repeat vote
+	case "unvote": // noteId
+		removed, err := d.Svc.Unvote(ctx, usn, req.NoteID)
+		if err != nil {
+			notesErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true, "removed": removed})
+	case "delete": // noteId; only the student who uploaded it
+		if err := d.Svc.Delete(ctx, usn, req.NoteID); err != nil {
+			notesErr(w, err)
+			return
+		}
+		writeJSON(w, map[string]bool{"ok": true})
+	case "mine": // code: which of the course's notes are this student's, and which they upvoted
+		if !notes.ValidCode(req.Code) {
+			writeErr(w, http.StatusBadRequest, CodeBadInput)
+			return
+		}
+		mine, voted, err := d.Svc.Mine(ctx, usn, req.Code)
+		if err != nil {
+			notesErr(w, err)
+			return
+		}
+		writeJSON(w, map[string][]string{"mine": mine, "voted": voted})
 	case "report": // noteId, reason
 		if err := d.Svc.Report(ctx, usn, req.NoteID, req.Reason); err != nil {
 			notesErr(w, err)

@@ -140,6 +140,27 @@ func repoContract(t *testing.T, mk func(t *testing.T) Repo) {
 		}
 	})
 
+	t.Run("a vote can be taken back, and mine says which notes are whose", func(t *testing.T) {
+		r := mk(t)
+		r.CreateWithin(ctx, note("u1", "U1", "C1", base), day, 5)
+		r.SetLive(ctx, "u1", "k", 1, "application/pdf")
+		r.CreateWithin(ctx, note("u2", "U2", "C1", base.Add(time.Second)), day, 5)
+		r.SetLive(ctx, "u2", "k", 1, "application/pdf")
+		r.Vote(ctx, "u2", "U1")
+		mine, voted, err := r.Mine(ctx, "C1", "U1")
+		if err != nil || len(mine) != 1 || mine[0] != "u1" || len(voted) != 1 || voted[0] != "u2" {
+			t.Fatalf("Mine = %v %v %v, want mine=[u1] voted=[u2]", mine, voted, err)
+		}
+		for i, want := range []bool{true, false} {
+			if removed, err := r.Unvote(ctx, "u2", "U1"); err != nil || removed != want {
+				t.Errorf("unvote %d = %v, %v, want %v", i, removed, err, want)
+			}
+		}
+		if got, _ := r.Get(ctx, "u2"); got.Votes != 0 {
+			t.Errorf("votes after unvote = %d", got.Votes)
+		}
+	})
+
 	t.Run("a report can be taken back so it can be sent again", func(t *testing.T) {
 		r := mk(t)
 		r.CreateWithin(ctx, note("t1", "U1", "C1", base), day, 5)

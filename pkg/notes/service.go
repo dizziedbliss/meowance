@@ -54,6 +54,10 @@ type Repo interface {
 	Delete(ctx context.Context, id string) error
 	ListLive(ctx context.Context, code string) ([]Note, error) // newest first; Votes filled
 	Vote(ctx context.Context, id, usn string) (added bool, err error)
+	// Unvote takes a student's upvote back; removed is false if they hadn't voted.
+	Unvote(ctx context.Context, id, usn string) (removed bool, err error)
+	// Mine lists, among a course's live notes, the ids this student uploaded and the ids they upvoted.
+	Mine(ctx context.Context, code, usn string) (mine, voted []string, err error)
 	Report(ctx context.Context, id, usn, reason string) (added bool, err error)
 	// RemoveReport takes a report back (its email never went out), so a retry counts as new.
 	RemoveReport(ctx context.Context, id, usn string) error
@@ -215,6 +219,38 @@ func (s *Service) Vote(ctx context.Context, usn, id string) (counted bool, err e
 		return false, err
 	}
 	return s.Repo.Vote(ctx, id, usn)
+}
+
+// Unvote takes the student's upvote back.
+func (s *Service) Unvote(ctx context.Context, usn, id string) (removed bool, err error) {
+	if _, err := s.live(ctx, id); err != nil {
+		return false, err
+	}
+	return s.Repo.Unvote(ctx, id, usn)
+}
+
+// Mine is which of a course's notes this student uploaded and which they upvoted.
+func (s *Service) Mine(ctx context.Context, usn, code string) (mine, voted []string, err error) {
+	mine, voted, err = s.Repo.Mine(ctx, strings.ToUpper(strings.TrimSpace(code)), usn)
+	if mine == nil {
+		mine = []string{}
+	}
+	if voted == nil {
+		voted = []string{}
+	}
+	return mine, voted, err
+}
+
+// Delete lets a student take down a note they uploaded: the file first, then the row.
+func (s *Service) Delete(ctx context.Context, usn, id string) error {
+	n, err := s.live(ctx, id)
+	if err != nil {
+		return err
+	}
+	if n.Uploader != usn {
+		return ErrNotYours
+	}
+	return s.Remove(ctx, id)
 }
 
 // Report tells Max about a note, once per student.

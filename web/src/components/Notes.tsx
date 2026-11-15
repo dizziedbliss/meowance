@@ -2,7 +2,10 @@ import { useEffect, useState } from "react";
 import { isoDayMonth, todayISO } from "../lib/dates";
 import {
   type Note,
+  deleteNote,
+  forgetVote,
   listNotes,
+  myNotes,
   noteFileUrl,
   normCode,
   NotesError,
@@ -10,6 +13,7 @@ import {
   rememberVote,
   report,
   sizeLabel,
+  unvote,
   validCode,
   vote,
   votedIds,
@@ -33,6 +37,8 @@ export function Notes({ data }: { data: Attendance }) {
   const [adding, setAdding] = useState(false);
   const [msg, setMsg] = useState<{ text: string; bad: boolean } | null>(null);
   const [voted, setVoted] = useState(() => new Set(votedIds()));
+  const [mine, setMine] = useState<Set<string>>(new Set());
+  const [deleting, setDeleting] = useState<string | null>(null);
   const [reporting, setReporting] = useState<string | null>(null);
   const [reason, setReason] = useState("");
 
@@ -45,10 +51,18 @@ export function Notes({ data }: { data: Attendance }) {
     setLoadErr(null);
     setAdding(false);
     setReporting(null);
+    setDeleting(null);
+    setMine(new Set());
     if (ok) {
       listNotes(code)
         .then((n) => live && setList(n))
         .catch((x) => live && setLoadErr(failure(x)));
+      // which are mine / which i upvoted: the server knows best (the browser's own list can be stale)
+      myNotes(code).then((r) => {
+        if (!live || !r) return;
+        setMine(new Set(r.mine));
+        setVoted(new Set(r.voted));
+      });
     }
     return () => {
       live = false;
@@ -56,22 +70,45 @@ export function Notes({ data }: { data: Attendance }) {
   }, [code, ok]);
 
   async function upvote(n: Note) {
-    if (voted.has(n.id)) return;
     setMsg(null);
-    setVoted((v) => new Set(v).add(n.id));
-    setList((l) => l && l.map((x) => (x.id === n.id ? { ...x, votes: x.votes + 1 } : x)));
-    try {
-      const counted = await vote(n.id);
-      rememberVote(n.id);
-      // a vote from an earlier login (the list was wiped with logout) doesn't count twice: undo our +1
-      if (!counted) setList((l) => l && l.map((y) => (y.id === n.id ? { ...y, votes: y.votes - 1 } : y)));
-    } catch (x) {
+    const had = voted.has(n.id);
+    const bump = (by: number) => setList((l) => l && l.map((x) => (x.id === n.id ? { ...x, votes: x.votes + by } : x)));
+    const flip = (on: boolean) =>
       setVoted((v) => {
         const c = new Set(v);
-        c.delete(n.id);
+        if (on) c.add(n.id);
+        else c.delete(n.id);
         return c;
       });
-      setList((l) => l && l.map((y) => (y.id === n.id ? { ...y, votes: y.votes - 1 } : y)));
+    // show it right away; undo if the server says no
+    flip(!had);
+    bump(had ? -1 : 1);
+    try {
+      if (had) {
+        const removed = await unvote(n.id);
+        forgetVote(n.id);
+        if (!removed) bump(1); // there was no vote of ours to take back: the number was right all along
+      } else {
+        const counted = await vote(n.id);
+        rememberVote(n.id);
+        // a vote from an earlier login doesn't count twice: undo our +1
+        if (!counted) bump(-1);
+      }
+    } catch (x) {
+      flip(had);
+      bump(had ? 1 : -1);
+      setMsg({ text: failure(x), bad: true });
+    }
+  }
+
+  async function remove(n: Note) {
+    setMsg(null);
+    try {
+      await deleteNote(n.id);
+      setList((l) => l && l.filter((x) => x.id !== n.id));
+      setDeleting(null);
+      setMsg({ text: "gone. poof.", bad: false });
+    } catch (x) {
       setMsg({ text: failure(x), bad: true });
     }
   }
@@ -137,6 +174,7 @@ export function Notes({ data }: { data: Attendance }) {
           onDone={(n) => {
             setAdding(false);
             setList((l) => [n, ...(l ?? [])]);
+            setMine((m) => new Set(m).add(n.id));
             setMsg({ text: "posted!! ur basically a topper now heh", bad: false });
           }}
         />
@@ -165,16 +203,33 @@ export function Notes({ data }: { data: Attendance }) {
               <button
                 type="button"
                 onClick={() => upvote(n)}
-                disabled={voted.has(n.id)}
-                aria-label={`upvote, ${n.votes} so far`}
+                aria-pressed={voted.has(n.id)}
+                aria-label={voted.has(n.id) ? `upvoted, ${n.votes} so far. tap to unvote` : `upvote, ${n.votes} so far`}
                 className={voted.has(n.id) ? "text-orange" : "text-ink-2 hover:text-orange"}
               >
                 ▲ {n.votes}
               </button>
-              <button type="button" onClick={() => setReporting(reporting === n.id ? null : n.id)} className="text-mut hover:text-ink" aria-expanded={reporting === n.id}>
-                report
-              </button>
+              {mine.has(n.id) ? (
+                <button type="button" onClick={() => setDeleting(deleting === n.id ? null : n.id)} className="text-mut hover:text-dead" aria-expanded={deleting === n.id}>
+                  delete
+                </button>
+              ) : (
+                <button type="button" onClick={() => setReporting(reporting === n.id ? null : n.id)} className="text-mut hover:text-ink" aria-expanded={reporting === n.id}>
+                  report
+                </button>
+              )}
             </div>
+            {deleting === n.id && (
+              <div className="col-span-full flex flex-wrap items-center gap-4 font-mono text-xs">
+                <span className="text-ink-2">delete it for good? no undo.</span>
+                <button type="button" onClick={() => remove(n)} className="text-dead underline-offset-4 hover:underline">
+                  yes, bin it
+                </button>
+                <button type="button" onClick={() => setDeleting(null)} className="text-mut hover:text-ink">
+                  nah
+                </button>
+              </div>
+            )}
             {reporting === n.id && (
               <form onSubmit={(e) => sendReport(e, n.id)} className="col-span-full flex flex-wrap gap-3">
                 <label htmlFor={`why-${n.id}`} className="sr-only">

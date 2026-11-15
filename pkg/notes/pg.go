@@ -142,6 +142,34 @@ func (p *PG) Vote(ctx context.Context, id, usn string) (bool, error) {
 	return tag.RowsAffected() == 1, err
 }
 
+func (p *PG) Unvote(ctx context.Context, id, usn string) (bool, error) {
+	tag, err := p.pool.Exec(ctx, `delete from votes where note_id = $1 and usn = $2`, id, usn)
+	return tag.RowsAffected() == 1, err
+}
+
+func (p *PG) Mine(ctx context.Context, code, usn string) (mine, voted []string, err error) {
+	rows, err := p.pool.Query(ctx, `select id, uploader = $2, exists(select 1 from votes v where v.note_id = notes.id and v.usn = $2)
+		from notes where code = $1 and status = 'live'`, code, usn)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var id string
+		var own, voter bool
+		if err := rows.Scan(&id, &own, &voter); err != nil {
+			return nil, nil, err
+		}
+		if own {
+			mine = append(mine, id)
+		}
+		if voter {
+			voted = append(voted, id)
+		}
+	}
+	return mine, voted, rows.Err()
+}
+
 func (p *PG) RemoveReport(ctx context.Context, id, usn string) error {
 	_, err := p.pool.Exec(ctx, `delete from reports where note_id = $1 and usn = $2`, id, usn)
 	return err
