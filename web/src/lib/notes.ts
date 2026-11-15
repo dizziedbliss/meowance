@@ -152,6 +152,31 @@ export function vote(id: string): Promise<boolean> {
   return withToken((t) => post<{ added: boolean }>({ action: "vote", noteId: id }, t)).then((r) => r.added);
 }
 
+/** Takes the upvote back. Resolves to whether there was one to take. */
+export function unvote(id: string): Promise<boolean> {
+  return withToken((t) => post<{ removed: boolean }>({ action: "unvote", noteId: id }, t)).then((r) => r.removed);
+}
+
+/** Deletes a note this student uploaded (the server refuses anyone else). */
+export function deleteNote(id: string): Promise<void> {
+  return withToken((t) => post<unknown>({ action: "delete", noteId: id }, t)).then(() => undefined);
+}
+
+/**
+ * Which of a course's notes are this student's, and which they upvoted. Only asks when a login is
+ * already saved (opening the page mustn't hit the portal); null means "don't know".
+ */
+export async function myNotes(code: string): Promise<{ mine: string[]; voted: string[] } | null> {
+  const s = storage();
+  const token = s ? loadToken(s, Date.now()) : null;
+  if (!token) return null;
+  try {
+    return await post<{ mine: string[]; voted: string[] }>({ action: "mine", code: normCode(code) }, token);
+  } catch {
+    return null;
+  }
+}
+
 export function report(id: string, reason: string): Promise<void> {
   return withToken((t) => post<unknown>({ action: "report", noteId: id, reason }, t)).then(() => undefined);
 }
@@ -220,6 +245,14 @@ export function votedIds(): string[] {
 export function rememberVote(id: string): void {
   try {
     storage()?.setItem(NOTES_VOTED, JSON.stringify([...new Set([...votedIds(), id])]));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function forgetVote(id: string): void {
+  try {
+    storage()?.setItem(NOTES_VOTED, JSON.stringify(votedIds().filter((x) => x !== id)));
   } catch {
     /* ignore */
   }

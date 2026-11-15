@@ -70,6 +70,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   is built in). Takedown: reports email Max the note id; `go run ./cmd/notesadmin remove <id>` (needs
   `DATABASE_URL` and the `GOOGLE_*` vars in the shell) deletes the file and the row. Course folders are found
   by name and the oldest wins (`orderBy=createdTime`), so two cold instances racing to make one agree.
+  Files open in Drive's viewer (`/file/d/<id>/view`), not as a download. The uploader can delete their own
+  note and anyone can take their upvote back (`delete`, `unvote`); `mine` tells the page which notes of a
+  course are the student's and which they upvoted (it only asks when a login is already saved).
 - **`cmd/devserver`**: same handler locally, optional fixture mode; notes run fully in memory there.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's

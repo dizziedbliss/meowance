@@ -163,6 +163,40 @@ func TestNotesActionsNeedAValidToken(t *testing.T) {
 	}
 }
 
+func TestNotesOwnDeleteAndUnvote(t *testing.T) {
+	r := newNotesRig(t)
+	tokA, tokB := r.login(usnA), r.login(usnB)
+	id, key := r.upload(tokA)
+	r.call("POST", "/api/notes", `{"action":"commit","noteId":"`+id+`","key":"`+key+`"}`, tokA, "")
+	r.call("POST", "/api/notes", `{"action":"vote","noteId":"`+id+`"}`, tokB, "")
+
+	rec := r.call("POST", "/api/notes", `{"action":"mine","code":"23AI501"}`, tokA, "")
+	if !strings.Contains(rec.Body.String(), `"mine":["`+id+`"]`) || !strings.Contains(rec.Body.String(), `"voted":[]`) {
+		t.Errorf("A's mine = %s", rec.Body)
+	}
+	rec = r.call("POST", "/api/notes", `{"action":"mine","code":"23AI501"}`, tokB, "")
+	if !strings.Contains(rec.Body.String(), `"mine":[]`) || !strings.Contains(rec.Body.String(), `"voted":["`+id+`"]`) {
+		t.Errorf("B's mine = %s", rec.Body)
+	}
+
+	rec = r.call("POST", "/api/notes", `{"action":"unvote","noteId":"`+id+`"}`, tokB, "")
+	if rec.Code != 200 || !strings.Contains(rec.Body.String(), `"removed":true`) {
+		t.Errorf("unvote = %d %s", rec.Code, rec.Body)
+	}
+	rec = r.call("POST", "/api/notes", `{"action":"delete","noteId":"`+id+`"}`, tokB, "")
+	if rec.Code != 403 || errCode(rec) != "forbidden" {
+		t.Errorf("B deleting A's note = %d %s, want 403 forbidden", rec.Code, rec.Body)
+	}
+	rec = r.call("POST", "/api/notes", `{"action":"delete","noteId":"`+id+`"}`, tokA, "")
+	if rec.Code != 200 {
+		t.Fatalf("A deleting own note = %d %s", rec.Code, rec.Body)
+	}
+	rec = r.call("GET", "/api/notes?code=23AI501", "", "", "")
+	if strings.Contains(rec.Body.String(), id) {
+		t.Errorf("deleted note still listed: %s", rec.Body)
+	}
+}
+
 func TestNotesFullFlow(t *testing.T) {
 	r := newNotesRig(t)
 	tok := r.login(usnA)

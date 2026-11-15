@@ -95,6 +95,55 @@ func (h *harness) goLive(t *testing.T, owner string) string {
 	return r.NoteID
 }
 
+func TestOnlyTheUploaderDeletes(t *testing.T) {
+	h := newHarness()
+	id := h.goLive(t, usn)
+	if err := h.svc.Delete(context.Background(), "4MC23AI002", id); !errors.Is(err, ErrNotYours) {
+		t.Fatalf("another student: err = %v, want ErrNotYours", err)
+	}
+	if len(h.store.deleted) != 0 || h.repo.notes[id] == nil {
+		t.Fatal("someone else's delete touched the note")
+	}
+	if err := h.svc.Delete(context.Background(), usn, id); err != nil {
+		t.Fatal(err)
+	}
+	if len(h.store.deleted) != 1 || h.repo.notes[id] == nil || h.repo.notes[id].Status == "live" {
+		t.Errorf("owner delete: file deleted %v, row %+v (the row must stay, retired, so it still counts)", h.store.deleted, h.repo.notes[id])
+	}
+	if l, _ := h.svc.List(context.Background(), "23AI501"); len(l) != 0 {
+		t.Errorf("deleted note still listed: %v", l)
+	}
+	if err := h.svc.Delete(context.Background(), usn, id); !errors.Is(err, ErrNotFound) {
+		t.Errorf("deleting twice: %v, want ErrNotFound", err)
+	}
+}
+
+// Deleting must not hand the daily slot back, or upload-delete loops would churn Drive forever.
+func TestDeletingDoesNotRefundTheDailyLimit(t *testing.T) {
+	h := newHarness()
+	for i := 0; i < DailyUploads; i++ {
+		id := h.goLive(t, usn)
+		if err := h.svc.Delete(context.Background(), usn, id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := h.svc.Init(context.Background(), usn, in()); !errors.Is(err, ErrTooMany) {
+		t.Errorf("upload after %d upload-delete rounds: err = %v, want ErrTooMany", DailyUploads, err)
+	}
+}
+
+func TestUnvoteTakesTheVoteBack(t *testing.T) {
+	h := newHarness()
+	id := h.goLive(t, usn)
+	h.svc.Vote(context.Background(), "4MC23AI002", id)
+	if removed, err := h.svc.Unvote(context.Background(), "4MC23AI002", id); err != nil || !removed {
+		t.Fatalf("Unvote = %v, %v", removed, err)
+	}
+	if n, _ := h.repo.Get(context.Background(), id); n.Votes != 0 {
+		t.Errorf("votes = %d", n.Votes)
+	}
+}
+
 func TestInitOpensAPendingNote(t *testing.T) {
 	h := newHarness()
 	r, err := h.svc.Init(context.Background(), usn, in())

@@ -2,13 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   checkFile,
   clearToken,
+  deleteNote,
   listNotes,
   loadToken,
+  myNotes,
   NotesError,
   notesErrorCopy,
   normCode,
   saveToken,
   sizeLabel,
+  unvote,
   uploadLine,
   vote,
 } from "./notes";
@@ -137,6 +140,34 @@ describe("api calls", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(json(200, { ok: true, added: true })).mockResolvedValueOnce(json(200, { ok: true, added: false })));
     expect(await vote("note1")).toBe(true);
     expect(await vote("note1")).toBe(false);
+  });
+
+  it("unvote and delete send their own actions", async () => {
+    saveToken(store, "tok", 7 * 86400, Date.now());
+    const seen: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (_u: string, init?: RequestInit) => {
+      seen.push(JSON.parse(String(init?.body)).action);
+      return json(200, { ok: true, removed: true });
+    }));
+    expect(await unvote("n1")).toBe(true);
+    await deleteNote("n1");
+    expect(seen).toEqual(["unvote", "delete"]);
+  });
+
+  it("myNotes asks only when there's already a login (it never pops one), else says it doesn't know", async () => {
+    const f = vi.fn().mockResolvedValue(json(200, { mine: ["a"], voted: ["b"] }));
+    vi.stubGlobal("fetch", f);
+    expect(await myNotes("23ai501")).toBeNull();
+    expect(f).not.toHaveBeenCalled();
+    saveToken(store, "tok", 7 * 86400, Date.now());
+    expect(await myNotes("23ai501")).toEqual({ mine: ["a"], voted: ["b"] });
+    expect(JSON.parse(String(f.mock.calls[0][1].body))).toMatchObject({ action: "mine", code: "23AI501" });
+  });
+
+  it("myNotes shrugs off a failure (the list still works without it)", async () => {
+    saveToken(store, "tok", 7 * 86400, Date.now());
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(json(401, { error: "bad_token" })));
+    expect(await myNotes("23ai501")).toBeNull();
   });
 
   it("a fresh token the server still refuses is an error, not a loop", async () => {
