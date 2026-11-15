@@ -49,6 +49,9 @@ type Repo interface {
 	CreateWithin(ctx context.Context, n Note, since time.Time, max int) (created bool, err error)
 	// Reject marks a pending note as failed; it stays on record and keeps counting.
 	Reject(ctx context.Context, id string) error
+	// Retire takes a live note off the list when its uploader deletes it. The row stays (as
+	// "rejected") so it keeps counting toward the daily limit.
+	Retire(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (Note, error) // ErrNotFound if missing; Votes filled
 	SetLive(ctx context.Context, id, key string, size int64, mime string) error
 	Delete(ctx context.Context, id string) error
@@ -241,7 +244,8 @@ func (s *Service) Mine(ctx context.Context, usn, code string) (mine, voted []str
 	return mine, voted, err
 }
 
-// Delete lets a student take down a note they uploaded: the file first, then the row.
+// Delete lets a student take down a note they uploaded: the file goes, the row stays retired
+// so the daily limit can't be dodged by uploading and deleting in a loop.
 func (s *Service) Delete(ctx context.Context, usn, id string) error {
 	n, err := s.live(ctx, id)
 	if err != nil {
@@ -250,7 +254,12 @@ func (s *Service) Delete(ctx context.Context, usn, id string) error {
 	if n.Uploader != usn {
 		return ErrNotYours
 	}
-	return s.Remove(ctx, id)
+	if n.FileKey != "" {
+		if err := s.Store.Delete(ctx, n.FileKey); err != nil {
+			return err
+		}
+	}
+	return s.Repo.Retire(ctx, id)
 }
 
 // Report tells Max about a note, once per student.

@@ -82,6 +82,10 @@ func (p *PG) Reject(ctx context.Context, id string) error {
 	return p.touch(ctx, `update notes set status = 'rejected' where id = $1 and status = 'pending'`, id)
 }
 
+func (p *PG) Retire(ctx context.Context, id string) error {
+	return p.touch(ctx, `update notes set status = 'rejected' where id = $1 and status = 'live'`, id)
+}
+
 func (p *PG) SetLive(ctx context.Context, id, key string, size int64, mime string) error {
 	return p.touch(ctx, `update notes set status = 'live', file_key = $2, size = $3, mime = $4 where id = $1 and status = 'pending'`, id, key, size, mime)
 }

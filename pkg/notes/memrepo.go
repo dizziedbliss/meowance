@@ -47,6 +47,16 @@ func (r *memRepo) Reject(_ context.Context, id string) error {
 	n.Status = "rejected"
 	return nil
 }
+func (r *memRepo) Retire(_ context.Context, id string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n, ok := r.notes[id]
+	if !ok || n.Status != "live" {
+		return ErrNotFound
+	}
+	n.Status = "rejected"
+	return nil
+}
 func (r *memRepo) Get(_ context.Context, id string) (Note, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()

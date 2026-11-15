@@ -161,6 +161,21 @@ func repoContract(t *testing.T, mk func(t *testing.T) Repo) {
 		}
 	})
 
+	t.Run("a retired note leaves the list but still counts toward the limit", func(t *testing.T) {
+		r := mk(t)
+		r.CreateWithin(ctx, note("r1", "U9", "C1", base), day, 1)
+		r.SetLive(ctx, "r1", "k", 1, "application/pdf")
+		if err := r.Retire(ctx, "r1"); err != nil {
+			t.Fatal(err)
+		}
+		if got, _ := r.ListLive(ctx, "C1"); len(got) != 0 {
+			t.Errorf("retired note listed: %v", got)
+		}
+		if ok, _ := r.CreateWithin(ctx, note("r2", "U9", "C1", base), day, 1); ok {
+			t.Error("retiring a note gave the slot back")
+		}
+	})
+
 	t.Run("a report can be taken back so it can be sent again", func(t *testing.T) {
 		r := mk(t)
 		r.CreateWithin(ctx, note("t1", "U1", "C1", base), day, 5)
