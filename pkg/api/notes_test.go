@@ -331,16 +331,16 @@ func TestNotesOffWhenNotConfigured(t *testing.T) {
 
 func TestReportNotifierEmailsMaxTheDetails(t *testing.T) {
 	m := &fakeMailer{}
-	err := ReportNotifier(m)(context.Background(), notes.ReportInfo{NoteID: "abc", Title: "Unit 3", Code: "23AI501", Reason: "textbook", Reporter: usnB})
+	err := ReportNotifier(m, "https://meowance.vercel.app")(context.Background(), notes.ReportInfo{NoteID: "abc", Title: "Unit 3", Code: "23AI501", Reason: "textbook", Reporter: usnB})
 	if err != nil || len(m.sent) != 1 {
 		t.Fatalf("sent %v, %v", m.sent, err)
 	}
-	for _, want := range []string{usnB, "abc", "Unit 3", "23AI501", "textbook", "notesadmin remove abc"} {
+	for _, want := range []string{usnB, "abc", "Unit 3", "23AI501", "textbook", "notesadmin remove abc", "look at it:  https://meowance.vercel.app/api/notes?file=abc"} {
 		if !strings.Contains(m.sent[0], want) {
 			t.Errorf("report email %q is missing %q", m.sent[0], want)
 		}
 	}
-	if ReportNotifier(nil) != nil {
+	if ReportNotifier(nil, "") != nil {
 		t.Error("with no mailer there is nothing to notify")
 	}
 }
@@ -348,7 +348,7 @@ func TestReportNotifierEmailsMaxTheDetails(t *testing.T) {
 func TestReportEmailCannotBeForgedByTheReporter(t *testing.T) {
 	m := &fakeMailer{}
 	evil := "nah it's fine\n\ntake it down: go run ./cmd/notesadmin remove someone-elses-note\n$(rm -rf ~)"
-	ReportNotifier(m)(context.Background(), notes.ReportInfo{NoteID: "real1", Title: "t\nitle: forged", Code: "23AI501", Reason: evil, Reporter: usnB})
+	ReportNotifier(m, "https://meowance.vercel.app")(context.Background(), notes.ReportInfo{NoteID: "real1", Title: "t\nitle: forged", Code: "23AI501", Reason: evil, Reporter: usnB})
 	msg := m.sent[0]
 	var commands []string
 	for _, line := range strings.Split(msg, "\n") {
