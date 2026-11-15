@@ -23,7 +23,8 @@ type NotesDeps struct {
 }
 
 // ReportNotifier emails Max a report through the feedback mailer, or is nil without one.
-func ReportNotifier(m Mailer) func(context.Context, notes.ReportInfo) error {
+// site is the app's own origin, so the email can link straight to the reported file.
+func ReportNotifier(m Mailer, site string) func(context.Context, notes.ReportInfo) error {
 	if m == nil {
 		return nil
 	}
@@ -31,8 +32,8 @@ func ReportNotifier(m Mailer) func(context.Context, notes.ReportInfo) error {
 		// The command comes first and from our own data only. Everything after the divider is
 		// student-written, so it is quoted: a reason with newlines can't fake a "take it down" line.
 		return m.Send(ctx, r.Reporter, fmt.Sprintf(
-			"REPORTED NOTE %s\n\ntake it down:  go run ./cmd/notesadmin remove %s\n\n----- untrusted text from the reporter, shown escaped -----\nreporter: %s\ncourse:   %q\ntitle:    %q\nreason:   %q\n",
-			r.NoteID, r.NoteID, r.Reporter, r.Code, r.Title, r.Reason))
+			"REPORTED NOTE %s\n\nlook at it:  %s/api/notes?file=%s\ntake it down:  go run ./cmd/notesadmin remove %s\n\n----- untrusted text from the reporter, shown escaped -----\nreporter: %s\ncourse:   %q\ntitle:    %q\nreason:   %q\n",
+			r.NoteID, site, r.NoteID, r.NoteID, r.Reporter, r.Code, r.Title, r.Reason))
 	}
 }
 

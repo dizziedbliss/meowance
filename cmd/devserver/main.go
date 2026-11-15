@@ -120,7 +120,7 @@ func main() {
 	store.Routes(mux)
 	signer, _ := notes.NewSigner("dev-only-secret-dev-only-secret-0")
 	devNotes := &api.NotesDeps{
-		Svc:     &notes.Service{Repo: notes.NewMemRepo(), Store: store, Notify: api.ReportNotifier(mail)},
+		Svc:     &notes.Service{Repo: notes.NewMemRepo(), Store: store, Notify: api.ReportNotifier(mail, "http://localhost:5180")},
 		Signer:  signer,
 		Portal:  f,
 		Origins: []string{"http://localhost:5180", "http://127.0.0.1:5180", "http://localhost:5181", "http://127.0.0.1:5181"},

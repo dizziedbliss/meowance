@@ -55,7 +55,7 @@ func build() (*api.NotesDeps, error) {
 		}
 	}
 	return &api.NotesDeps{
-		Svc:     &notes.Service{Repo: pg, Store: drive, Notify: api.ReportNotifier(api.ResendFromEnv())},
+		Svc:     &notes.Service{Repo: pg, Store: drive, Notify: api.ReportNotifier(api.ResendFromEnv(), origins[0])},
 		Signer:  signer,
 		Portal:  portal.NewClient(),
 		Origins: origins,
