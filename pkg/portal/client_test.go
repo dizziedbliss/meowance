@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -361,5 +362,43 @@ func TestFetchAllHistory(t *testing.T) {
 	}
 	if len(s.Asked.History) != len(s.Dashboard.Courses) || s.Asked.AllHistory {
 		t.Errorf("Asked = %+v; want the expanded course list", s.Asked)
+	}
+}
+
+// Every semester has its own calendar: a sem-3 student's login must end up on
+// the page of the 3rd-sem COE (yearId=3), not the 7th sem's the portal opens first.
+func TestCalendarFollowsTheStudentsSemester(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	inner := srv.Config.Handler
+	var mu sync.Mutex
+	var years []string
+	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Query().Get("task") == "calenderdisplay" {
+			mu.Lock()
+			years = append(years, r.URL.Query().Get("yearId"))
+			mu.Unlock()
+		}
+		if r.Method == http.MethodGet && (r.URL.Query().Get("task") == "" || r.URL.Query().Get("task") == "dashboard") { // the dashboard: make the student a 3rd-semester one
+			rec := httptest.NewRecorder()
+			inner.ServeHTTP(rec, r)
+			for k, v := range rec.Header() {
+				w.Header()[k] = v
+			}
+			w.WriteHeader(rec.Code)
+			w.Write([]byte(strings.ReplaceAll(rec.Body.String(), "SEM 07", "SEM 03")))
+			return
+		}
+		inner.ServeHTTP(w, r)
+	})
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, Extras{Calendar: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Calendar == nil {
+		t.Fatal("no calendar")
+	}
+	slices.Sort(years)
+	if !slices.Equal(years, []string{"2", "3"}) {
+		t.Errorf("calendar pages fetched = %v, want the default (2) then the sem-3 one (3)", years)
 	}
 }

@@ -26,9 +26,14 @@ describe("needs", () => {
     expect(needs(s, "timetable", at(2026, 11, 16, 0))).toBe(true); // next monday
   });
   it("keeps the calendar for 7 days", () => {
-    const s = stored({ a: att({ calendar: cal }), got: { calendar: FRI } });
+    const s = stored({ a: att({ calendar: cal }), got: { calendar: FRI }, basis: { calendar: "7" } });
     expect(needs(s, "calendar", FRI + 6 * 86_400_000)).toBe(false);
     expect(needs(s, "calendar", FRI + 7 * 86_400_000)).toBe(true);
+  });
+  it("refetches a calendar that wasn't fetched for this student's semester", () => {
+    const s = stored({ a: att({ calendar: cal }), got: { calendar: FRI }, basis: { calendar: "3" } });
+    expect(needs(s, "calendar", FRI)).toBe(true);
+    expect(needs(stored({ a: att({ calendar: cal }), got: { calendar: FRI } }), "calendar", FRI)).toBe(true); // cached before this rule
   });
 });
 

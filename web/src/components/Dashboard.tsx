@@ -1,4 +1,4 @@
-import { cappedTotal, semTotal, squares } from "../lib/history";
+import { cappedTotal, classesLeft, semTotal, squares } from "../lib/history";
 import { todayISO } from "../lib/dates";
 import type { Attendance, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
@@ -16,6 +16,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
   const dated = (c: Course) => squares(c.attended, c.conducted, data.history?.[c.code]?.classes);
   const today = todayISO();
   const total = (c: Course) => cappedTotal(c, semTotal(data.history?.[c.code]), data.calendar, today);
+  const left = (c: Course) => classesLeft(c, data.history?.[c.code], data.calendar, today);
   const panel = (code: string) =>
     open === code && (
       <div className={`border-b border-hair ${code === worst?.code ? "pt-4" : ""}`}>
@@ -24,7 +25,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
     );
   return (
     <>
-      {worst && <Slab course={worst} classes={dated(worst)} total={total(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
+      {worst && <Slab course={worst} classes={dated(worst)} total={total(worst)} left={left(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
       {worst && panel(worst.code)}
 
       {rest.length > 0 && (
@@ -39,7 +40,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
           </div>
           {rest.map((c) => (
             <div key={c.code}>
-              <CourseRow course={c} classes={dated(c)} total={total(c)} open={open === c.code} onToggle={toggle(c.code)} />
+              <CourseRow course={c} classes={dated(c)} total={total(c)} left={left(c)} open={open === c.code} onToggle={toggle(c.code)} />
               {panel(c.code)}
             </div>
           ))}

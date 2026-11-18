@@ -30,7 +30,7 @@ const courseOf = (a: Attendance, code: string): Course | undefined => a.courses.
 
 /** What a page reflects in this dashboard; it's refetched when that changes. */
 function basisOf(a: Attendance, e: Extra): string {
-  if (e === "exams") return a.student.sem;
+  if (e === "exams" || e === "calendar") return a.student.sem; // each semester has its own calendar
   const [kind, code] = e.split(":");
   const c = courseOf(a, code);
   if (!c) return "";
@@ -62,7 +62,7 @@ export function needs(s: Stored | null, e: Extra, now: number): boolean {
   const got = s.got[e];
   if (got === undefined || get(s.a, e) == null) return true;
   if (e === "timetable") return weekStart(got) !== weekStart(now);
-  if (e === "calendar") return now - got >= CALENDAR_DAYS * DAY;
+  if (e === "calendar" && now - got >= CALENDAR_DAYS * DAY) return true;
   if (e === "exams" && now - got >= EXAM_DAYS * DAY) return true;
   return s.basis?.[e] !== basisOf(s.a, e);
 }

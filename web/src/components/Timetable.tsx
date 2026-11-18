@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { dayMonth, todayISO } from "../lib/dates";
 import type { Attendance } from "../lib/types";
+import { classesLeft } from "../lib/history";
 import { classTag, courseName, room, todayName, trimTime } from "../lib/week";
 import { SubTabs } from "./SubTabs";
 
@@ -73,7 +74,9 @@ export function Timetable({ data, loading }: { data: Attendance; loading: boolea
                 </div>
                 <ul>
                   {d.classes.map((c, i) => {
-                    const tag = classTag(c, data.courses);
+                    const course = data.courses.find((x) => x.code === c.code);
+                    const left = course ? classesLeft(course, data.history?.[c.code], data.calendar, now) : null;
+                    const tag = classTag(c, data.courses, left);
                     return (
                       <li
                         key={`${c.start}-${c.code}-${i}`}

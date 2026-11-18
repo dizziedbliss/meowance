@@ -63,3 +63,28 @@ func TestEventCrossesYear(t *testing.T) {
 		t.Fatalf("got %+v ok=%v", ev, ok)
 	}
 }
+
+func TestCalendarYearFor(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "calendar.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for sem, want := range map[string]string{"07": "2", "7": "2", "05": "1", "03": "3", "01": "4", "04": "", "x": ""} {
+		if got := CalendarYearFor(string(b), sem); got != want {
+			t.Errorf("sem %q: id %q, want %q", sem, got, want)
+		}
+	}
+}
+
+func TestEventsYear(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join("testdata", "dashboard.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := EventsYear(string(b)); got != "2" {
+		t.Errorf("EventsYear = %q, want 2 (the fixture's Events link)", got)
+	}
+	if got := EventsYear("<html>no menu</html>"); got != "" {
+		t.Errorf("EventsYear without a link = %q, want empty", got)
+	}
+}

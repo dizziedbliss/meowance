@@ -27,11 +27,11 @@ function useCountUp(target: number): number {
 }
 
 /** Your worst subject, as a slab in its zone's color. */
-type SlabProps = { course: Course; classes: ClassRecord[] | null; total: number | null; open: boolean; onToggle: () => void };
+type SlabProps = { course: Course; classes: ClassRecord[] | null; total: number | null; left: number | null; open: boolean; onToggle: () => void };
 
-export function Slab({ course, classes, total, open, onToggle }: SlabProps) {
-  const v = verdict(course);
-  const guess = total ? predicted(course, total) : null; // an extra, never the main verdict
+export function Slab({ course, classes, total, left, open, onToggle }: SlabProps) {
+  const v = verdict(course, left);
+  const guess = total && !v.cooked ? predicted(course, total) : null; // an extra, never the main verdict
   const shown = useCountUp(course.percent);
 
   return (
@@ -61,18 +61,18 @@ export function Slab({ course, classes, total, open, onToggle }: SlabProps) {
         <p className="mb-2.5 font-display text-[clamp(34px,4.3vw,52px)] font-extrabold leading-[.96] tracking-[-.025em] text-balance">
           <Headline head={v.head} numberClass="text-cream" />
         </p>
-        <p className="max-w-[34ch] text-base opacity-85">{v.sub}</p>
+        <p className={`max-w-[34ch] opacity-85 ${v.cooked ? "text-sm" : "text-base"}`}>{v.sub}</p>
         {v.then && (
           <div className="mt-5 border-t-[1.5px] border-on-slab/25 pt-4">
-            <p className="mb-1 font-display text-[clamp(24px,2.7vw,32px)] font-extrabold leading-[.96] tracking-[-.025em]">
+            <p className="mb-1 font-display text-[clamp(17px,1.8vw,21px)] font-bold leading-[1.1] tracking-[-.01em]">
               <Headline head={v.then.head} numberClass="text-cream" />
             </p>
-            <p className="max-w-[34ch] text-base opacity-85">{v.then.sub}</p>
+            <p className="max-w-[34ch] text-sm opacity-85">{v.then.sub}</p>
           </div>
         )}
       </div>
 
-      <Tally course={course} zone={v.zone} classes={classes} onSlab pop className="col-span-full mt-5" />
+      <Tally course={course} zone={v.zone} classes={classes} left={left} onSlab pop className="col-span-full mt-5" />
       {guess && <p className="col-span-full -mt-4 font-mono text-[11px] opacity-70 md:mt-2">{guess.line}*</p>}
     </section>
   );

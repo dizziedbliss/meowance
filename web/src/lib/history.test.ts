@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cappedTotal, semTotal, squares } from "./history";
+import { cappedTotal, classesLeft, semTotal, squares } from "./history";
 import { partLabel, seeMin } from "./scores";
 import type { ClassRecord, Course } from "./types";
 
@@ -61,19 +61,27 @@ describe("seeMin (seniors: 12 of 30 from 3 cies, 8 of 20 from 2 activities)", ()
 });
 
 describe("cappedTotal", () => {
-  // 2026-08-03 (mon) to 2026-11-14 (sat): 15 weeks of mon-sat, no holidays
-  const cal = { start: "2026-08-03", end: "2026-11-14", holidays: [], examDays: [], events: [] };
+  // 2026-08-03 (mon) to 2026-11-14 (sat): 15 weeks of mon-sat, no holidays; exams run on after the last day
+  const cal = {
+    start: "2026-08-03", end: "2026-12-05", holidays: [], examDays: [],
+    events: [{ from: "2026-11-14", to: "2026-11-14", title: "LAST WORKING DAY", kind: "lastday" as const }],
+  };
   const c = (credits: number, conducted: number) => ({ credits, conducted }) as Course;
   it("caps the portal's total at credits x weeks", () => {
     expect(cappedTotal(c(3, 10), 80, cal, "2026-08-03")).toBe(45);
   });
-  it("caps by pace: classes held + credits x weeks left", () => {
-    // 5 weeks left, 3 credits, 30 held -> 45; with only 20 held -> 35
+  it("caps by pace: classes held + what the days left to the last working day hold", () => {
+    // 5 weeks left (30 days), 3 credits -> 15 more; 20 held -> 35
     expect(cappedTotal(c(3, 20), 80, cal, "2026-10-12")).toBe(35);
+    // 2 days left, 3 credits -> 1 class
+    expect(cappedTotal(c(3, 40), 80, cal, "2026-11-13")).toBe(41);
   });
-  it("keeps a smaller portal total and falls back without a calendar", () => {
+  it("counts to the last working day, not the end of the exam period", () => {
+    expect(classesLeft(c(4, 40), { present: 40, absent: 0, stillToGo: 20, classes: [] } as never, cal, "2026-11-13")).toBeLessThanOrEqual(2);
+  });
+  it("keeps a smaller portal total; no calendar means no guess", () => {
     expect(cappedTotal(c(3, 10), 30, cal, "2026-08-03")).toBe(30);
-    expect(cappedTotal(c(3, 10), 80, null, "2026-08-03")).toBe(80);
-    expect(cappedTotal(c(3, 10), null, cal, "2026-08-03")).toBeNull();
+    expect(cappedTotal(c(3, 10), 80, null, "2026-08-03")).toBeNull();
+    expect(cappedTotal(c(3, 10), null, cal, "2026-08-03")).toBe(45); // no history: the two caps decide
   });
 });

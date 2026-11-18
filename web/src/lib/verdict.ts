@@ -13,6 +13,7 @@ export type Verdict = {
   head: Head;
   sub: string;
   then?: { head: Head; sub: string };
+  cooked?: boolean; // the target can't be hit with the classes left: headline is a roast, sub is the small why
 };
 
 export function zoneOf(percent: number): Zone {
@@ -25,7 +26,28 @@ const classes = (n: number) => (n === 1 ? "class" : "classes");
 const lives = (n: number) => (n === 1 ? "life" : "lives");
 export const fmtPct = (p: number) => (Math.round(p * 10) / 10).toFixed(1);
 
-export function verdict(c: Course): Verdict {
+/** Same course, same line every render (no flicker), different courses get different ones. */
+function pick(pool: string[], seed: string): string {
+  let h = 0;
+  for (const ch of seed) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return pool[h % pool.length];
+}
+
+const cooked = [
+  "ur beyond cooked-",
+  "beyond cooked fr-",
+  "ur cooked. no cap.",
+  "cooked. well done.",
+  "ur already burnt lol",
+  "beyond cooked heh-",
+];
+
+/**
+ * `left` is the classes still to be held this sem (null = unknown). When a
+ * target needs more than that, it's out of reach: say so instead of a number
+ * nobody can attend.
+ */
+export function verdict(c: Course, left: number | null = null): Verdict {
   if (c.conducted === 0) {
     return { zone: "safe", head: { before: "nothing yet", n: null, after: "" }, sub: "no classes conducted. enjoy it while it lasts." };
   }
@@ -46,6 +68,14 @@ export function verdict(c: Course): Verdict {
 
   if (zone === "fine") {
     const n = c.need85;
+    if (left !== null && n > left) {
+      return {
+        zone,
+        head: { before: pick(cooked, c.code), n: null, after: "" },
+        sub: `need ${n} more for 85 but only ${left} ${classes(left)} left. the fine's coming.`,
+        cooked: true,
+      };
+    }
     return {
       zone,
       head: { before: "attend ", n, after: ` more ${classes(n)}` },
@@ -53,13 +83,22 @@ export function verdict(c: Course): Verdict {
     };
   }
 
+  if (left !== null && c.need75 > left) {
+    return {
+      zone,
+      head: { before: pick(cooked, c.code), n: null, after: "" },
+      sub: `need ${c.need75} more just for 75 but only ${left} ${classes(left)} left.`,
+      cooked: true,
+    };
+  }
+  const gone85 = left !== null && c.need85 > left;
   return {
     zone,
     head: { before: "attend ", n: c.need75, after: ` more ${classes(c.need75)}` },
     sub: "that's just to crawl back to 75. teachers won't carry you past that, no cap.",
     then: {
-      head: { before: "", n: c.need85, after: " more for 85 tho." },
-      sub: "that's where the fine stops. zero bunks till then, you're on thin ice.",
+      head: gone85 ? { before: "85's out of reach", n: null, after: "" } : { before: "", n: c.need85, after: " more for 85 tho." },
+      sub: gone85 ? `only ${left} ${classes(left!)} left, so the fine's staying.` : "that's where the fine stops. zero bunks till then, you're on thin ice.",
     },
   };
 }
