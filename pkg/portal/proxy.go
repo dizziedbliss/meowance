@@ -82,6 +82,7 @@ func (p *proxySession) transport() *http.Transport {
 	tr := &http.Transport{
 		Proxy:                 p.url,
 		MaxIdleConns:          10,
+		MaxIdleConnsPerHost:   maxParallel + 1, // the default (2) redials 4 of the 6 parallel page fetches
 		IdleConnTimeout:       30 * time.Second,
 		TLSHandshakeTimeout:   10 * time.Second,
 		ExpectContinueTimeout: time.Second,

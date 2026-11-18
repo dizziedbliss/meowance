@@ -56,29 +56,6 @@ func TestParseAttendanceList(t *testing.T) {
 	}
 }
 
-func TestParseCIEDetails(t *testing.T) {
-	d, err := ParseCIEDetails(readFixture(t, "ciedetails.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if d.Code != "23AI701" {
-		t.Errorf("code = %q", d.Code)
-	}
-	want := []CIEStat{
-		{Name: "CIE1", Obtained: 6, ClassAvg: 6, Max: 10},
-		{Name: "CIE2", Obtained: 7, ClassAvg: 7, Max: 10},
-		{Name: "Final IA", Obtained: 13, ClassAvg: 14, Max: 50},
-	}
-	if len(d.Stats) != len(want) {
-		t.Fatalf("stats = %+v", d.Stats)
-	}
-	for i := range want {
-		if d.Stats[i] != want[i] {
-			t.Errorf("stat %d = %+v, want %+v", i, d.Stats[i], want[i])
-		}
-	}
-}
-
 func TestParseExamHistory(t *testing.T) {
 	x, err := ParseExamHistory(readFixture(t, "examhistory.html"))
 	if err != nil {
@@ -125,9 +102,6 @@ func TestHistoryParsersRejectOtherPages(t *testing.T) {
 	login := readFixture(t, "login.html")
 	if _, err := ParseAttendanceList(login); !errors.Is(err, ErrPortalChanged) {
 		t.Errorf("attendance list on login page: %v", err)
-	}
-	if _, err := ParseCIEDetails(login); !errors.Is(err, ErrPortalChanged) {
-		t.Errorf("cie details on login page: %v", err)
 	}
 	if _, err := ParseExamHistory(login); !errors.Is(err, ErrPortalChanged) {
 		t.Errorf("exam history on login page: %v", err)

@@ -18,8 +18,12 @@ import (
 	"time"
 )
 
-// DefaultBaseURL is the odd-term student/parent login page of MCE's Contineo portal.
+// DefaultBaseURL is the student/parent login page of MCE's Contineo portal,
+// the same address in odd and even terms.
 const DefaultBaseURL = "https://mceparents.contineo.in/parents/index.php"
+
+// errLoginSent marks a failure after the login POST went out: never retried.
+var errLoginSent = errors.New("after the login was sent")
 
 // Errors a caller can tell apart to show the right message.
 var (
@@ -63,7 +67,8 @@ type Client struct {
 	// (log.Printf is).
 	Logf func(format string, args ...any)
 
-	proxy *proxySession // nil: direct connection
+	proxy     *proxySession // nil: direct connection
+	calendars calendarCache // per warm instance; see calcache.go
 }
 
 func (c *Client) logf(format string, args ...any) {
@@ -78,6 +83,10 @@ func NewClient() *Client {
 	c := &Client{BaseURL: DefaultBaseURL, Timeout: 25 * time.Second, Retries: 2, Backoff: 1500 * time.Millisecond}
 	if user, pass := os.Getenv("OXYLABS_USERNAME"), os.Getenv("OXYLABS_PASSWORD"); user != "" && pass != "" {
 		c.useProxy(newProxySession(user, pass, proxyAddr))
+	} else {
+		tr := http.DefaultTransport.(*http.Transport).Clone()
+		tr.MaxIdleConnsPerHost = maxParallel + 1 // keep the parallel page fetches' connections, as the proxy path does
+		c.Transport = tr
 	}
 	return c
 }
@@ -96,15 +105,13 @@ func (c *Client) Proxied() bool { return c.proxy != nil }
 type Extras struct {
 	Timetable, Calendar, Exams bool
 	History                    []string // course codes whose class-by-class attendance is wanted
-	CIE                        []string // course codes whose CIE page (class averages) is wanted
+	// Have is the attended/conducted counts ("20/25") the browser's cached copy of
+	// a course's history reflects. When the fresh dashboard shows the same counts
+	// that page is skipped (left out of Snapshot.History): nothing new to read.
+	Have map[string]string
 	// AllHistory wants every course on the dashboard: a fresh login doesn't know
 	// the codes yet, and asking at login saves a second login right after.
 	AllHistory bool
-}
-
-// Any reports whether any extra page is wanted.
-func (e Extras) Any() bool {
-	return e.Timetable || e.Calendar || e.Exams || e.AllHistory || len(e.History) > 0 || len(e.CIE) > 0
 }
 
 // maxParallel caps the extra pages fetched at once, so a fresh browser asking
@@ -122,10 +129,9 @@ type Snapshot struct {
 	Timetable []Day
 	// Calendar is the semester's calendar of events, or nil if it couldn't be fetched.
 	Calendar *Calendar
-	// History and CIE are keyed by course code: a nil value means that page
-	// couldn't be fetched; a code not on the dashboard is left out.
+	// History is keyed by course code: a nil value means that page couldn't be
+	// fetched; a code not on the dashboard is left out.
 	History map[string]*CourseHistory
-	CIE     map[string]*CIEDetails
 	// Exams is every past semester's results, or nil if it couldn't be fetched.
 	Exams *ExamHistory
 }
@@ -169,6 +175,10 @@ func (c *Client) Fetch(ctx context.Context, usn string, dob time.Time, want Extr
 			}
 			c.logf("portal: 403 on attempt %d/%d, rotating proxy session", attempt+1, c.Retries+1)
 			c.proxy.rotate(session)
+		case errors.Is(err, errLoginSent):
+			// The portal may have seen this birthday already. Sending it again could
+			// count as more wrong tries on its side than our guard counted.
+			return nil, err
 		case errors.Is(err, ErrPortalDown):
 		default:
 			return s, err // success, bad login, or changed markup: retrying won't help
@@ -220,10 +230,13 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 	req.Header.Set("Referer", c.BaseURL)
 	resp, err := hc.Do(req) // follows the 303s to the dashboard, cookies included
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrPortalDown, netKind(err))
+		return nil, fmt.Errorf("%w: %w: %s", ErrPortalDown, errLoginSent, netKind(err))
 	}
 	dashURL := resp.Request.URL.String() // final, signed dashboard URL: the Referer for later pages
 	body, err := readBody(resp)
+	if errors.Is(err, ErrPortalDown) {
+		return nil, fmt.Errorf("%w: %w", errLoginSent, err)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +267,7 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 	snap := &Snapshot{Dashboard: d, Asked: want}
 	var (
 		wg   sync.WaitGroup
-		mu   sync.Mutex // guards the snapshot's maps
+		mu   sync.Mutex // guards the snapshot's history map
 		slot = make(chan struct{}, maxParallel)
 	)
 	fetchPage := func(name, path string, use func(string)) {
@@ -273,16 +286,24 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 		})
 	}
 	if year := EventsYear(body); want.Calendar && year != "" {
-		fetchPage("calendar", fmt.Sprintf(calendarPath, year), func(p string) {
-			// every semester has its own calendar; the page lists them all
-			if id := CalendarYearFor(p, d.Sem); id != "" && id != year {
-				if q, ok := c.extra(ctx, hc, "calendar", fmt.Sprintf(calendarPath, id), dashURL); ok {
-					p = q
+		// the same for everyone in this programme and sem: a warm instance reuses it
+		key := year + "|" + programme(d.Branch) + "|" + strings.TrimLeft(d.Sem, "0")
+		if cal := c.calendars.get(key, time.Now()); cal != nil {
+			snap.Calendar = cal
+			c.logf("calendar: cached")
+		} else {
+			fetchPage("calendar", fmt.Sprintf(calendarPath, year), func(p string) {
+				// every semester has its own calendar; the page lists them all
+				if id := CalendarYearFor(p, d.Branch, d.Sem); id != "" && id != year {
+					if q, ok := c.extra(ctx, hc, "calendar", fmt.Sprintf(calendarPath, id), dashURL); ok {
+						p = q
+					}
 				}
-			}
-			snap.Calendar = ParseCalendar(p)
-			c.logf("calendar: %d bytes, parsed %t", len(p), snap.Calendar != nil)
-		})
+				snap.Calendar = ParseCalendar(p)
+				c.calendars.put(key, snap.Calendar, time.Now())
+				c.logf("calendar: %d bytes, parsed %t", len(p), snap.Calendar != nil)
+			})
+		}
 	}
 	if want.Exams {
 		fetchPage("exam history", fmt.Sprintf(examHistoryPath, url.QueryEscape(usnOf(d, usn))), func(p string) {
@@ -299,24 +320,17 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 	}
 	// Every asked course gets its nil ("couldn't fetch") entry before any
 	// per-course fetch starts, so the goroutines only overwrite entries, under mu.
-	var history, cie []Course
+	var history []Course
 	if len(want.History) > 0 {
 		snap.History = map[string]*CourseHistory{}
 	}
 	for _, code := range want.History {
-		if co, ok := courses[code]; ok {
-			snap.History[code] = nil
-			history = append(history, co)
+		co, ok := courses[code]
+		if !ok || co.CourseID == "" || want.Have[code] == fmt.Sprintf("%d/%d", co.Attended, co.Conducted) {
+			continue // not this sem's course, no class list to open, or unchanged since the browser's copy
 		}
-	}
-	if len(want.CIE) > 0 {
-		snap.CIE = map[string]*CIEDetails{}
-	}
-	for _, code := range want.CIE {
-		if co, ok := courses[code]; ok {
-			snap.CIE[code] = nil
-			cie = append(cie, co)
-		}
+		snap.History[code] = nil
+		history = append(history, co)
 	}
 	for _, co := range history {
 		fetchPage("attendance list", fmt.Sprintf(attendanceListPath, co.CourseID, co.SecID, co.SemID), func(p string) {
@@ -327,18 +341,6 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 			}
 			mu.Unlock()
 			c.logf("attendance list: %d bytes, parsed %t", len(p), err == nil)
-		})
-	}
-	for _, co := range cie {
-		code := co.Code
-		fetchPage("cie details", fmt.Sprintf(cieDetailsPath, co.CourseID, co.SemID), func(p string) {
-			x, err := ParseCIEDetails(p)
-			mu.Lock()
-			if err == nil {
-				snap.CIE[code] = x
-			}
-			mu.Unlock()
-			c.logf("cie details: %d bytes, parsed %t", len(p), err == nil)
 		})
 	}
 	wg.Wait()
@@ -379,8 +381,6 @@ func pageKind(html string) string {
 		return "attendance list"
 	case strings.Contains(html, "res-table"):
 		return "exam history"
-	case strings.Contains(html, "cn-cie-grid"):
-		return "cie details"
 	case strings.Contains(html, "attendencelist"):
 		return "dashboard"
 	}

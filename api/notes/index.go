@@ -17,15 +17,30 @@ import (
 )
 
 var (
-	once    sync.Once
-	deps    *api.NotesDeps
-	depsErr error
-	notesFn = api.Notes(get)
+	mu       sync.Mutex
+	deps     *api.NotesDeps
+	depsErr  error
+	failedAt time.Time
+	notesFn  = api.Notes(get)
 )
 
-// get builds the dependencies on the first call from env; missing env means notes stay off (503).
+// retryBuild is how long a failed build is answered from memory before trying
+// again: a database that was briefly unreachable at cold start mustn't keep
+// notes off for the instance's whole life.
+const retryBuild = 30 * time.Second
+
+// get builds the dependencies from env on first use and keeps them; missing env
+// or a failed connect means notes are off (503) until a retry succeeds.
 func get() (*api.NotesDeps, error) {
-	once.Do(func() { deps, depsErr = build() })
+	mu.Lock()
+	defer mu.Unlock()
+	if deps != nil || (depsErr != nil && time.Since(failedAt) < retryBuild) {
+		return deps, depsErr
+	}
+	deps, depsErr = build()
+	if depsErr != nil {
+		failedAt = time.Now()
+	}
 	return deps, depsErr
 }
 

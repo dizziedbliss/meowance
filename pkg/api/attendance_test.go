@@ -42,7 +42,7 @@ func (f *fakeFetcher) Fetch(_ context.Context, usn string, dob time.Time, want p
 	if !want.Exams {
 		s.Exams = nil
 	}
-	s.History, s.CIE = nil, nil
+	s.History = nil
 	if want.AllHistory { // like the real client: every dashboard course
 		want.History, want.AllHistory = nil, false
 		for _, c := range f.d.Dashboard.Courses {
@@ -55,12 +55,6 @@ func (f *fakeFetcher) Fetch(_ context.Context, usn string, dob time.Time, want p
 			s.History = map[string]*portal.CourseHistory{}
 		}
 		s.History[code] = f.d.History[code]
-	}
-	for _, code := range want.CIE {
-		if s.CIE == nil {
-			s.CIE = map[string]*portal.CIEDetails{}
-		}
-		s.CIE[code] = f.d.CIE[code]
 	}
 	return &s, f.err
 }
@@ -195,6 +189,8 @@ func TestAttendanceErrors(t *testing.T) {
 		{"unknown extra", `{"usn":"4MC00AA001","dob":"15082004","extras":["fees"]}`, nil, 400, CodeBadInput},
 		{"bad course code", `{"usn":"4MC00AA001","dob":"15082004","extras":["history:../../x"]}`, nil, 400, CodeBadInput},
 		{"history without code", `{"usn":"4MC00AA001","dob":"15082004","extras":["history:"]}`, nil, 400, CodeBadInput},
+		{"bad history counts", `{"usn":"4MC00AA001","dob":"15082004","extras":["history:23AI701@x/1"]}`, nil, 400, CodeBadInput},
+		{"counts on a non-history extra", `{"usn":"4MC00AA001","dob":"15082004","extras":["calendar@1/2"]}`, nil, 400, CodeBadInput},
 		{"wrong creds", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrBadLogin, 401, CodeBadLogin},
 		{"portal down", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalDown, 502, CodePortalDown},
 		{"portal changed", `{"usn":"4MC00AA001","dob":"15082004"}`, portal.ErrPortalChanged, 502, CodePortalChanged},
@@ -249,22 +245,19 @@ func TestAttendanceHistoryExtras(t *testing.T) {
 		return string(b)
 	}
 	h, _ := portal.ParseAttendanceList(read("attendancelist.html"))
-	cie, _ := portal.ParseCIEDetails(read("ciedetails.html"))
 	snap.Exams, _ = portal.ParseExamHistory(read("examhistory.html"))
 	snap.History = map[string]*portal.CourseHistory{"23AI701": h, "23AI702": nil} // 23AI702's page failed
-	snap.CIE = map[string]*portal.CIEDetails{"23AI701": cie}
 	f := &fakeFetcher{d: snap}
-	rec := post(Attendance(f), `{"usn":"4MC00AA000","dob":"15082004","extras":["history:23AI701","history:23AI702","history:23AI701","cie:23AI701","exams"]}`)
+	rec := post(Attendance(f), `{"usn":"4MC00AA000","dob":"15082004","extras":["history:23AI701","history:23AI702","history:23AI701","exams"]}`)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status %d: %s", rec.Code, rec.Body)
 	}
-	if !reflect.DeepEqual(f.got.want, portal.Extras{History: []string{"23AI701", "23AI702"}, CIE: []string{"23AI701"}, Exams: true}) {
+	if !reflect.DeepEqual(f.got.want, portal.Extras{History: []string{"23AI701", "23AI702"}, Exams: true}) {
 		t.Errorf("asked the portal for %+v (duplicates should collapse)", f.got.want)
 	}
 	var resp struct {
-		History    map[string]*portal.CourseHistory `json:"history"`
-		CIEDetails map[string]*portal.CIEDetails    `json:"cieDetails"`
-		Exams      *portal.ExamHistory              `json:"exams"`
+		History map[string]*portal.CourseHistory `json:"history"`
+		Exams   *portal.ExamHistory              `json:"exams"`
 	}
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatal(err)
@@ -275,8 +268,8 @@ func TestAttendanceHistoryExtras(t *testing.T) {
 	if v, ok := resp.History["23AI702"]; !ok || v != nil {
 		t.Errorf("a failed page should be null, got %v (present %t)", v, ok)
 	}
-	if resp.CIEDetails["23AI701"] == nil || resp.Exams == nil || len(resp.Exams.Sems) != 6 {
-		t.Errorf("cie = %+v, exams = %+v", resp.CIEDetails, resp.Exams)
+	if resp.Exams == nil || len(resp.Exams.Sems) != 6 {
+		t.Errorf("exams = %+v", resp.Exams)
 	}
 	if strings.Contains(rec.Body.String(), `"timetable"`) {
 		t.Error("timetable sent without being asked")
@@ -306,5 +299,15 @@ func TestAttendanceHistoryAll(t *testing.T) {
 	json.Unmarshal(rec.Body.Bytes(), &resp)
 	if len(resp.History) != len(f.d.Dashboard.Courses) {
 		t.Errorf("history has %d courses, want all %d", len(resp.History), len(f.d.Dashboard.Courses))
+	}
+}
+
+func TestHistoryCountsHint(t *testing.T) {
+	_, _, want, ok := validate(Request{USN: "4MC00AA000", DOB: "15082004", Extras: []string{"history:23AI701@18/24", "history:23AI702"}}, time.Now())
+	if !ok {
+		t.Fatal("rejected a valid hint")
+	}
+	if !reflect.DeepEqual(want.History, []string{"23AI701", "23AI702"}) || !reflect.DeepEqual(want.Have, map[string]string{"23AI701": "18/24"}) {
+		t.Errorf("want = %+v", want)
 	}
 }

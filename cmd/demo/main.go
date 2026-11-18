@@ -8,6 +8,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/dizziedbliss/meowance/pkg/attend"
 	"github.com/dizziedbliss/meowance/pkg/portal"
@@ -33,16 +34,14 @@ func main() {
 	fmt.Printf("Last updated on the portal: %s\n\n", d.LastUpdated)
 
 	fmt.Printf("%-10s %-34s %3s %5s   %-20s   %-20s\n", "CODE", "COURSE", "Cr", "A/C", "@75%", "@85%")
-	fmt.Println(line(126))
+	fmt.Println(strings.Repeat("-", 126))
 	for _, c := range d.Courses {
-		pct := attend.Ratio(c.Attended, c.Conducted) * 100
 		fmt.Printf("%-10s %-34s %3.0f %5s   %-20s   %-20s\n",
 			c.Code, trunc(c.Name, 34), c.Credits,
 			fmt.Sprintf("%d/%d", c.Attended, c.Conducted),
 			verdict(c.Attended, c.Conducted, 0.75),
 			verdict(c.Attended, c.Conducted, 0.85),
 		)
-		_ = pct
 	}
 }
 
@@ -59,12 +58,4 @@ func trunc(s string, n int) string {
 		return s
 	}
 	return s[:n-1] + "…"
-}
-
-func line(n int) string {
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = '-'
-	}
-	return string(b)
 }

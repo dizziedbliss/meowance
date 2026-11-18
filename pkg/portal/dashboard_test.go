@@ -142,3 +142,35 @@ func TestNameActivities(t *testing.T) {
 		t.Errorf("names = %v, want %v", got, want)
 	}
 }
+
+// One odd row (no attendance link, a "-" max, an audit course) neither vanishes
+// nor swallows the row after it.
+func TestParseDashboardOddRows(t *testing.T) {
+	row := func(code, ltps, seeMax, link string) string {
+		return `<tr><td class="uk-text-center">` + code + `</td><td class="">Course ` + code + `</td>` +
+			`<td class="uk-text-center">` + ltps + `</td><td class="uk-text-center">3.00</td>` +
+			`<td class="uk-text-center">Theory</td><td class="uk-text-center">Core</td>` +
+			`<td class="uk-text-center">50</td><td class="uk-text-center">` + seeMax + `</td>` + link + `</tr>`
+	}
+	link := func(id string) string {
+		return `<td><a href="index.php?option=com_studentdashboard&controller=studentdashboard&task=attendencelist&courseId=` + id + `&secId=1&semId=2">A</a></td>`
+	}
+	html := `<table>` + row("23AU101", "0-0-0-0", "-", "") + row("23AI702", "2-0-2-0", "50", link("77")) +
+		row("23NS103", "NA", "NA", link("88")) + `</table>`
+	d, err := ParseDashboard(html)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(d.Courses) != 3 {
+		t.Fatalf("courses = %+v, want 3", d.Courses)
+	}
+	if c := d.Courses[0]; c.Code != "23AU101" || c.CourseID != "" || c.SEEMax != 0 {
+		t.Errorf("linkless row = %+v", c)
+	}
+	if c := d.Courses[1]; c.Code != "23AI702" || c.CourseID != "77" {
+		t.Errorf("row after the linkless one = %+v (took the wrong link?)", c)
+	}
+	if c := d.Courses[2]; c.Code != "23NS103" || c.LTPS != "NA" || c.CourseID != "88" {
+		t.Errorf("NA row = %+v", c)
+	}
+}

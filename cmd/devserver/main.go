@@ -10,6 +10,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -21,9 +22,9 @@ import (
 	"github.com/dizziedbliss/meowance/pkg/portal"
 )
 
-// fixture serves saved pages. The attendance list and CIE page are one course's;
-// they're served for every course code asked for.
-type fixture struct{ dashboard, timetable, calendar, attendanceList, cieDetails, examHistory string }
+// fixture serves saved pages. The attendance list is one course's; it's served
+// for every course code asked for.
+type fixture struct{ dashboard, timetable, calendar, attendanceList, examHistory string }
 
 func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want portal.Extras) (*portal.Snapshot, error) {
 	select {
@@ -54,25 +55,22 @@ func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want port
 	if want.Exams {
 		s.Exams, _ = portal.ParseExamHistory(f.examHistory)
 	}
+	counts := map[string]string{}
+	for _, c := range d.Courses {
+		counts[c.Code] = fmt.Sprintf("%d/%d", c.Attended, c.Conducted)
+	}
 	for _, code := range want.History {
 		if s.History == nil {
 			s.History = map[string]*portal.CourseHistory{}
+		}
+		if want.Have[code] == counts[code] && counts[code] != "" {
+			continue // unchanged since the browser's copy, like the real client
 		}
 		h, _ := portal.ParseAttendanceList(f.attendanceList)
 		if h != nil {
 			h.Code = code
 		}
 		s.History[code] = h
-	}
-	for _, code := range want.CIE {
-		if s.CIE == nil {
-			s.CIE = map[string]*portal.CIEDetails{}
-		}
-		x, _ := portal.ParseCIEDetails(f.cieDetails)
-		if x != nil {
-			x.Code = code
-		}
-		s.CIE[code] = x
 	}
 	return s, nil
 }
@@ -98,10 +96,9 @@ func main() {
 		tt, _ := os.ReadFile(filepath.Join(dir, "timetable.html"))
 		cal, _ := os.ReadFile(filepath.Join(dir, "calendar.html"))
 		al, _ := os.ReadFile(filepath.Join(dir, "attendancelist.html"))
-		cie, _ := os.ReadFile(filepath.Join(dir, "ciedetails.html"))
 		ex, _ := os.ReadFile(filepath.Join(dir, "examhistory.html"))
 		f = fixture{dashboard: string(b), timetable: string(tt), calendar: string(cal),
-			attendanceList: string(al), cieDetails: string(cie), examHistory: string(ex)}
+			attendanceList: string(al), examHistory: string(ex)}
 		log.Printf("fixture mode: %s (timetable: %t, calendar: %t)", *fx, len(tt) > 0, len(cal) > 0)
 	}
 

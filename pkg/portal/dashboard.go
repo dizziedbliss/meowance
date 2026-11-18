@@ -7,6 +7,7 @@ package portal
 
 import (
 	"errors"
+	stdhtml "html"
 	"regexp"
 	"strconv"
 	"strings"
@@ -57,11 +58,13 @@ var (
 	reName    = regexp.MustCompile(`<h3>([^<]+)</h3>\s*<img class="uk-preserve-width`)
 	reBranch  = regexp.MustCompile(`<p>\s*([^,<]+?)\s*,\s*SEM\s*([0-9]+)\s*,\s*SEC\s*([A-Za-z0-9]+)\s*</p>`)
 	reUpdated = regexp.MustCompile(`Last Updated On\s*:\s*([0-9/]+)`)
-	reRow     = regexp.MustCompile(`(?s)<tr>\s*<td class="uk-text-center">([0-9][0-9A-Za-z]+)</td>\s*<td[^>]*>([^<]+)</td>\s*` +
-		`<td class="uk-text-center">([0-9]-[0-9]-[0-9]-[0-9])</td>\s*<td class="uk-text-center">([0-9.]+)</td>\s*` +
-		`<td class="uk-text-center">([^<]+)</td>\s*<td class="uk-text-center">([^<]+)</td>\s*` +
-		`<td class="uk-text-center">([0-9.]+)</td>\s*<td class="uk-text-center">([0-9.]+)</td>` +
-		`.*?attendencelist&courseId=([0-9]+)&secId=([0-9]*)&semId=([0-9]+)`)
+	// The course table, read row by row and cell by cell so one odd row (a
+	// blank max, an audit course, no attendance link) can't swallow the next
+	// row or vanish: code, name, LTPS, credits, type, nature, CIE max, SEE max.
+	reTableRow    = regexp.MustCompile(`(?s)<tr[^>]*>(.*?)</tr>`)
+	reTD          = regexp.MustCompile(`(?s)<td([^>]*)>(.*?)</td>`)
+	reCode        = regexp.MustCompile(`^[0-9]{2}[0-9A-Za-z]+$`)
+	reListLink    = regexp.MustCompile(`attendencelist&courseId=([0-9]+)&secId=([0-9]*)&semId=([0-9]+)`)
 	reDetailCode  = regexp.MustCompile(`top_back[^>]*>\s*([0-9][0-9A-Za-z]+)\s*</td>`)
 	rePresentPair = regexp.MustCompile(`<span[^>]*>([0-9]+)</span>\s*/\s*<span[^>]*>([0-9]+)</span>`)
 	reCIEPart     = regexp.MustCompile(`(?s)<td>\s*([^<]{1,20}?)\s*</td>\s*<td[^>]*>\s*Marks Entered on\s*([^<]*?)\s*</td>` +
@@ -95,19 +98,21 @@ func ParseDashboard(html string) (*Dashboard, error) {
 
 	details := detailsByCode(html)
 
-	for _, m := range reRow.FindAllStringSubmatch(html, -1) {
+	for _, row := range reTableRow.FindAllStringSubmatch(reComment.ReplaceAllString(html, ""), -1) {
+		cells := reTD.FindAllStringSubmatch(row[1], -1)
+		if len(cells) < 8 || strings.Contains(cells[0][1], "top_back") {
+			continue // not a course row (the per-course detail blocks start with a top_back code cell)
+		}
+		text := func(i int) string { return html2text(cells[i][2]) }
 		c := Course{
-			Code:     strings.TrimSpace(m[1]),
-			Name:     strings.TrimSpace(m[2]),
-			LTPS:     m[3],
-			Credits:  num(m[4]),
-			Type:     strings.TrimSpace(m[5]),
-			Nature:   strings.TrimSpace(m[6]),
-			CIEMax:   num(m[7]),
-			SEEMax:   num(m[8]),
-			CourseID: m[9],
-			SecID:    m[10],
-			SemID:    m[11],
+			Code: text(0), Name: text(1), LTPS: text(2), Credits: num(text(3)),
+			Type: text(4), Nature: text(5), CIEMax: num(text(6)), SEEMax: num(text(7)),
+		}
+		if !reCode.MatchString(c.Code) {
+			continue
+		}
+		if l := reListLink.FindStringSubmatch(row[1]); l != nil {
+			c.CourseID, c.SecID, c.SemID = l[1], l[2], l[3] // no link: the course still shows, without a class list
 		}
 		if det, ok := details[c.Code]; ok {
 			c.Attended, c.Conducted = det.attended, det.conducted
@@ -189,6 +194,11 @@ func detailsByCode(html string) map[string]detail {
 		out[code] = det
 	}
 	return out
+}
+
+// html2text is a cell's text: tags dropped, entities decoded, spaces collapsed.
+func html2text(s string) string {
+	return strings.TrimSpace(reSpaces.ReplaceAllString(stdhtml.UnescapeString(reTag.ReplaceAllString(s, " ")), " "))
 }
 
 func num(s string) float64 {

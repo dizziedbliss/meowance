@@ -29,7 +29,8 @@ type Fetcher interface {
 // Request is the JSON body: dob is DDMMYYYY, matching how students type it.
 // Extras names the pages wanted besides the dashboard: "timetable", "calendar",
 // "exams", and per course "history:<code>" (class by class; "history:all" for
-// every course, used at login) or "cie:<code>" (class averages).
+// every course, used at login). "history:<code>@<attended>/<conducted>" says the
+// browser has that course's page for those counts: it's skipped if they still hold.
 type Request struct {
 	USN    string   `json:"usn"`
 	DOB    string   `json:"dob"`
@@ -72,10 +73,9 @@ type Response struct {
 	// Calendar is the semester's calendar of events: left out when not asked
 	// for, null when it couldn't be fetched.
 	Calendar json.RawMessage `json:"calendar,omitempty"`
-	// History and CIEDetails are keyed by course code, each null when its page
-	// couldn't be fetched; left out when not asked for.
-	History    map[string]*portal.CourseHistory `json:"history,omitempty"`
-	CIEDetails map[string]*portal.CIEDetails    `json:"cieDetails,omitempty"`
+	// History is keyed by course code, each null when its page couldn't be
+	// fetched; left out when not asked for.
+	History map[string]*portal.CourseHistory `json:"history,omitempty"`
 	// Exams is every past semester's results: left out when not asked for,
 	// null when it couldn't be fetched.
 	Exams json.RawMessage `json:"exams,omitempty"`
@@ -103,6 +103,9 @@ const (
 
 // A course code as the portal prints it (23AI701, 23OEEC71, 23AI704D).
 var reCourseCode = regexp.MustCompile(`^[0-9]{2}[A-Z0-9]{2,10}$`)
+
+// Counts a cached history page reflects: attended/conducted.
+var reCounts = regexp.MustCompile(`^[0-9]{1,4}/[0-9]{1,4}$`)
 
 // maxCourses caps per-course extras in one request; a semester has ~6 courses.
 const maxCourses = 20
@@ -219,6 +222,10 @@ func validate(req Request, now time.Time) (string, time.Time, portal.Extras, boo
 	}
 	for _, e := range req.Extras {
 		kind, code, perCourse := strings.Cut(e, ":")
+		code, have, hinted := strings.Cut(code, "@")
+		if hinted && (kind != "history" || !reCounts.MatchString(have)) {
+			return "", time.Time{}, want, false
+		}
 		switch {
 		case e == "timetable":
 			want.Timetable = true
@@ -230,13 +237,17 @@ func validate(req Request, now time.Time) (string, time.Time, portal.Extras, boo
 			want.AllHistory = true
 		case perCourse && reCourseCode.MatchString(code) && kind == "history":
 			want.History = appendOnce(want.History, code)
-		case perCourse && reCourseCode.MatchString(code) && kind == "cie":
-			want.CIE = appendOnce(want.CIE, code)
+			if hinted {
+				if want.Have == nil {
+					want.Have = map[string]string{}
+				}
+				want.Have[code] = have
+			}
 		default:
 			return "", time.Time{}, want, false
 		}
 	}
-	if len(want.History) > maxCourses || len(want.CIE) > maxCourses {
+	if len(want.History) > maxCourses {
 		return "", time.Time{}, want, false
 	}
 	return usn, dob, want, true
@@ -264,16 +275,10 @@ func Build(snap *portal.Snapshot, usn string) Response {
 	if snap.Asked.Exams {
 		out.Exams = mustJSON(snap.Exams)
 	}
-	if len(snap.Asked.History) > 0 {
+	if len(snap.Asked.History) > 0 { // skipped (unchanged) courses are simply absent
 		out.History = snap.History
 		if out.History == nil {
 			out.History = map[string]*portal.CourseHistory{}
-		}
-	}
-	if len(snap.Asked.CIE) > 0 {
-		out.CIEDetails = snap.CIE
-		if out.CIEDetails == nil {
-			out.CIEDetails = map[string]*portal.CIEDetails{}
 		}
 	}
 	for _, c := range d.Courses {
