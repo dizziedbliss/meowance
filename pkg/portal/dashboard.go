@@ -127,6 +127,23 @@ type detail struct {
 	cieTotal            float64
 }
 
+// nameActivities fixes the dashboard's habit of printing a cie and an activity
+// under the same name (SE1, SE1, SE2, SE2). The first SEn is cie n and the next
+// is activity n (checked against the CIE page: CIE1, A1, CIE2, A2), so a repeat
+// becomes "A<n>". A name that appears once is left alone.
+func nameActivities(parts []CIEPart) {
+	seen := map[string]bool{}
+	for i, p := range parts {
+		if !seen[p.Name] {
+			seen[p.Name] = true
+			continue
+		}
+		if n := strings.TrimLeft(p.Name, "SEsecieCIE \t"); n != "" {
+			parts[i].Name = "A" + n
+		}
+	}
+}
+
 // detailsByCode scans each per-course detail block (headed by its code in a
 // `top_back` cell) for its CIE parts, CIE total, and "Present a/c" pair.
 func detailsByCode(html string) map[string]detail {
@@ -158,6 +175,7 @@ func detailsByCode(html string) map[string]detail {
 			}
 			det.cie = append(det.cie, part)
 		}
+		nameActivities(det.cie)
 		if m := reCIETotal.FindStringSubmatch(marks); m != nil {
 			det.cieTotal = num(m[1])
 		}

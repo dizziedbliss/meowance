@@ -130,3 +130,15 @@ func TestParseRejectsNonDashboard(t *testing.T) {
 		t.Errorf("err = %v, want ErrNoCourses", err)
 	}
 }
+
+func TestNameActivities(t *testing.T) {
+	parts := []CIEPart{{Name: "SE1"}, {Name: "SE1"}, {Name: "SE2"}, {Name: "SE2"}, {Name: "SE3"}}
+	nameActivities(parts)
+	var got []string
+	for _, p := range parts {
+		got = append(got, p.Name)
+	}
+	if want := []string{"SE1", "A1", "SE2", "A2", "SE3"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("names = %v, want %v", got, want)
+	}
+}

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { semTotal, squares } from "./history";
+import { cappedTotal, semTotal, squares } from "./history";
 import { partLabel, seeMin } from "./scores";
-import type { ClassRecord } from "./types";
+import type { ClassRecord, Course } from "./types";
 
 const cls = (date: string, present = true, start = "11:00"): ClassRecord => ({ date, start, end: "12:00", present });
 
@@ -57,5 +57,23 @@ describe("seeMin (seniors: 12 of 30 from 3 cies, 8 of 20 from 2 activities)", ()
   });
   it("says nothing for juniors: their scheme changed and isn't known yet", () => {
     expect(seeMin(course([part("SE1", 5)]), "4MC25CI000")).toBeNull();
+  });
+});
+
+describe("cappedTotal", () => {
+  // 2026-08-03 (mon) to 2026-11-14 (sat): 15 weeks of mon-sat, no holidays
+  const cal = { start: "2026-08-03", end: "2026-11-14", holidays: [], examDays: [], events: [] };
+  const c = (credits: number, conducted: number) => ({ credits, conducted }) as Course;
+  it("caps the portal's total at credits x weeks", () => {
+    expect(cappedTotal(c(3, 10), 80, cal, "2026-08-03")).toBe(45);
+  });
+  it("caps by pace: classes held + credits x weeks left", () => {
+    // 5 weeks left, 3 credits, 30 held -> 45; with only 20 held -> 35
+    expect(cappedTotal(c(3, 20), 80, cal, "2026-10-12")).toBe(35);
+  });
+  it("keeps a smaller portal total and falls back without a calendar", () => {
+    expect(cappedTotal(c(3, 10), 30, cal, "2026-08-03")).toBe(30);
+    expect(cappedTotal(c(3, 10), 80, null, "2026-08-03")).toBe(80);
+    expect(cappedTotal(c(3, 10), null, cal, "2026-08-03")).toBeNull();
   });
 });

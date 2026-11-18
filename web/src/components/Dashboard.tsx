@@ -1,4 +1,5 @@
-import { semTotal, squares } from "../lib/history";
+import { cappedTotal, semTotal, squares } from "../lib/history";
+import { todayISO } from "../lib/dates";
 import type { Attendance, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
@@ -13,7 +14,8 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
   const [worst, ...rest] = byPercent(data.courses);
   const toggle = (code: string) => () => onOpen(open === code ? null : code);
   const dated = (c: Course) => squares(c.attended, c.conducted, data.history?.[c.code]?.classes);
-  const total = (c: Course) => semTotal(data.history?.[c.code]);
+  const today = todayISO();
+  const total = (c: Course) => cappedTotal(c, semTotal(data.history?.[c.code]), data.calendar, today);
   const panel = (code: string) =>
     open === code && (
       <div className={`border-b border-hair ${code === worst?.code ? "pt-4" : ""}`}>
@@ -54,7 +56,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
           </p>
           <p>use your own usn. stalking on someone else's is weird without their permission. don't be that guy.</p>
           <p>
-            * predicted bunks count the classes the portal plans for the whole sem. as you might know that teachers wont take or mark all of them, so
+            * predicted bunks count the classes the portal plans for the whole sem, capped at 1 class a week per credit till the last working day (open events once so we have the dates). as you might know that teachers wont take or mark all of them, so
             it's mostly right according to our calculations, but dont rely on us and try to find us if its wrong. <strong className="text-ink">don't bunk just we said to.</strong>
           </p>
         </div>
