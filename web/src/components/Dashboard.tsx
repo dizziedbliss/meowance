@@ -3,6 +3,7 @@ import { cappedTotal, classesLeft, semTotal, squares } from "../lib/history";
 import { todayISO } from "../lib/dates";
 import type { Attendance, ClassRecord, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
+import { Contribute } from "./Contribute";
 import { CourseRow } from "./CourseRow";
 import { FeedbackBox } from "./FeedbackBox";
 import { HistoryPanel } from "./HistoryPanel";
@@ -75,6 +76,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
         </div>
       </footer>
       <FeedbackBox usn={data.student.usn} />
+      <Contribute className="mt-8" />
     </>
   );
 }
