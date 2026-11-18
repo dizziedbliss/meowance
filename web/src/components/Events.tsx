@@ -1,5 +1,6 @@
 import { isoDayMonth, todayISO } from "../lib/dates";
 import { countdown, daysLeftLine, eventTag, rangeLabel, splitEvents, workingDaysLeft } from "../lib/events";
+import { lastWorkingDay } from "../lib/history";
 import type { Attendance, CalendarEvent } from "../lib/types";
 
 const tone = { safe: "text-safe", dead: "text-dead", orange: "text-orange" } as const;
@@ -24,7 +25,8 @@ export function Events({ data, loading }: { data: Attendance; loading: boolean }
     );
   }
 
-  const left = workingDaysLeft(cal, today < cal.start ? cal.start : today);
+  // to the last working day (classes stop there), not the end of the exam period, like the dashboard
+  const left = workingDaysLeft({ ...cal, end: lastWorkingDay(cal) }, today < cal.start ? cal.start : today);
   const { upcoming, past } = splitEvents(cal, today);
   const [next, ...rest] = upcoming;
 
@@ -64,8 +66,8 @@ export function Events({ data, loading }: { data: Attendance; loading: boolean }
         <>
           <div className="pt-8 pb-1 font-mono text-xs text-mut">coming up</div>
           <ul>
-            {rest.map((e) => (
-              <Row key={`${e.from}-${e.title}`} e={e} today={today} />
+            {rest.map((e, i) => (
+              <Row key={`${e.from}-${e.title}-${i}`} e={e} today={today} />
             ))}
           </ul>
         </>
@@ -78,8 +80,8 @@ export function Events({ data, loading }: { data: Attendance; loading: boolean }
             <span className="hidden group-open:inline">− already happened ({past.length})</span>
           </summary>
           <ul className="mt-2 opacity-60">
-            {past.map((e) => (
-              <Row key={`${e.from}-${e.title}`} e={e} />
+            {past.map((e, i) => (
+              <Row key={`${e.from}-${e.title}-${i}`} e={e} />
             ))}
           </ul>
         </details>

@@ -25,23 +25,32 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 
 - **`pkg/portal`**: `client.go` logs into Contineo (GET login page → scrape Joomla CSRF token →
   POST `username` + `passwd`=DOB `YYYY-MM-DD` → follow 303s) with a fresh cookie jar per call, one
-  retry on network failure only; then, only if asked (`Extras`), this week's timetable and the
+  retry on network failure only, and only before the POST went out (`errLoginSent`: a resent birthday
+  could count as extra wrong tries on the portal's side); then, only if asked (`Extras`), this week's timetable and the
   calendar of events, in parallel in the same session, with the dashboard as Referer (best effort:
   nil on failure). `Client.Logf` logs
   one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
-  dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
-  is never parsed); `calendar.go` the semester dates, holidays, exam days and events
-  (every sem has its own COE page, `yearId`: the dashboard's Events link opens one, and that page's
-  COE list gives the student's sem; no id is hardcoded). `proxy.go`: with
+  dashboard, including each course's CIE parts and total, row by row and cell by cell (an odd row,
+  e.g. no attendance link or a "-" max, mustn't vanish or swallow the next); `timetable.go` the week
+  (the faculty column isn't read; the class list page names the lecturer); `calendar.go` the semester
+  dates, holidays, exam days and events (every sem and programme has its own COE page, `yearId`: the
+  dashboard's Events link opens one, and that page's COE list gives the student's UG/MCA/M.Tech sem,
+  newest id wins; no id is hardcoded). `calcache.go`: a warm instance keeps each parsed calendar 6h,
+  keyed by Events link + programme + sem (it holds nothing personal), so only the first login per sem
+  fetches it. Nothing else is cached server-side. `proxy.go`: with
   `OXYLABS_USERNAME`/`OXYLABS_PASSWORD` set, requests go through a sticky residential proxy session
   (the portal blocks datacenter IPs). Each login attempt is pinned to one session ID via its
   context; a 403 retires only that ID and retries. The handler gives a login 50s in all
   (`fetchBudget`), under Vercel's 60s cap. The login POST is sent
-  exactly once per attempt (a test counts it).
+  exactly once per login (tests count it). The transport keeps `maxParallel+1` idle connections per
+  host so the parallel page fetches reuse their tunnels.
 - **`pkg/attend`**: pure bunk math over attended/conducted: `Recover` (classes in a row to reach a
   target), `CanBunk` (classes you can miss and stay at/above it). The math lives only here.
-- **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY, extras?: ["timetable","calendar"]}`
-  → `{student, courses, timetable?, calendar?}` with `need75`, `need85`, `skip85` and
+- **`pkg/api`**: `POST /api/attendance` `{usn, dob: DDMMYYYY, extras?: ["timetable","calendar","exams",
+  "history:all","history:<code>","history:<code>@<attended>/<conducted>"]}` → `{student, courses,
+  timetable?, calendar?, exams?, history?}`. The `@counts` form says the browser has that course's class
+  list for those counts: if the fresh dashboard shows the same, the page isn't fetched and the course
+  is left out of `history` with `need75`, `need85`, `skip85` and
   `cie`/`cieTotal`/`cieMax` per course. An extra not asked for is left out; asked but failed is
   `null`. The dashboard always comes back (the login lands on it). Validates MCE USNs (`4MC…`) and real dates. Error codes:
   `bad_input` 400, `bad_login` 401, `portal_down`/`portal_changed`/`portal_blocked` (portal 403s our
@@ -79,10 +88,17 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - **`web/`**: Vite + React 19 + Tailwind v4. `lib/verdict.ts` turns the API numbers into the copy
   (zones, "attend N more classes", lives); `lib/week.ts` tags each timetable class from its subject's
   zone (bunkable / show up / don't you dare); `lib/scores.ts` the CIE verdicts; `lib/cgpa.ts` the scores → "target" tab (needed SGPA, a grade + see marks per course, a course that tops out low is capped and the others cover for it; the see is shown out of 100, the portal's /50 doubled; the bands and pass rules are the 2024-25 handbook's, so the tab only shows for the 24 batch and older); `lib/events.ts`
-  working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats; `lib/cache.ts` which extras are stale (the
-  timetable after the week changes, the calendar after 7 days, either after a failed fetch) and
-  merges replies into the cache. Login and sync fetch the dashboard only; opening a tab fetches its
-  page when stale; sync on a tab refreshes that page too. `lib/vault.ts` keeps creds encrypted with a non-extractable
+  working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats and
+  "today" in IST; `lib/history.ts` `classesLeft` (the portal's planned total minus held, 0 after the last
+  working day: what "out of reach" uses) and `cappedTotal` (that total capped by credits x weeks: only for
+  the predicted-bunks line and the timetable's "· N left" tag, the conservative guesses); `lib/cache.ts` which extras are stale (the timetable after the week, sem or
+  section changes, the calendar after 7 days or a sem change, a course's class list when its counts change;
+  a failed page waits 10 min before it's auto-fetched again) and merges replies into the cache, dropping
+  last sem's courses; `wire` adds the `@counts` hints. Login fetches the dashboard + every class list +
+  the calendar (all the home screen needs, so no second login); opening a tab fetches its page when
+  stale; sync refreshes what the screen shows, and the server skips unchanged class lists. Zones come
+  from the server's `need75`/`need85`, never the rounded percent. A reply that lands after a logout is
+  dropped (`session` in `App.tsx`). `lib/vault.ts` keeps creds encrypted with a non-extractable
   WebCrypto key (IndexedDB) and the last dashboard in localStorage; logout wipes both.
 
 ## Conventions
@@ -94,6 +110,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   real calendar 2026-11-13) are only a small extra line under each course, with the disclaimer in
   "facts to know": a prediction mustn't talk anyone out of classes, and teachers rarely take or
   enter every planned class. Never use the portal's "still to go" as classes really left: it's stale.
+  "Out of reach" ("ur cooked") only when a target needs more than the portal's planned classes left,
+  never from the credit cap: a course can meet more often than its credits, and undercounting tells
+  someone it's hopeless when it isn't (shipped that way once, 2026-11-18, and pulled).
 - **UI:** dark only, sharp corners, no boxed cards (rows split by hairlines), one loud element per
   screen, bottom nav is a background-less overlay over the dark fade, labels split by hairlines, active tab underlined in orange (Max rejected a solid bar: "ew"). No endless
   scroll: secondary content goes in sub-tabs or collapsibles. Tests are "cie", never "se". Copy is lowercase, dry gen-z; cat puns welcome
@@ -117,8 +136,6 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   25-26 and 26-27 intakes' scheme changed and is unknown.
 - The CGPA target assumes every course's CIE is out of 50 (the portal's `cieMax` is only "usually" 50)
   and whole-or-half-mark totals; unconfirmed with real data. It has only been run on fixtures.
-- The CIE details page (class averages) is still parsed and fetchable server-side, but the UI
-  dropped it (Max: not useful).
 - The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
   through the Oxylabs proxy, prod reaches it (a fake USN gets 401 `bad_login` in ~3s). A real
   student login through prod still needs Max's own USN to confirm the full dashboard. The Oxylabs
@@ -158,3 +175,12 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
 - Notes need the Google OAuth app published ("In production"): in "Testing" mode Google expires the refresh
   token after 7 days and every notes call would answer 502 `storage_error`.
 - A report is just an email; reported notes stay listed until Max runs `notesadmin remove`.
+- Not done for speed: per-tab code splitting (React is most of the 290 KB; it'd save ~20 KB) and
+  self-hosting the Google Fonts (one render-blocking stylesheet + 2 extra origins on a cold load).
+- The predicted-bunks line can disagree with the main verdict (slab: "attend 3 more" above
+  "predicted: even 75's out of reach"), since only the line uses the credit cap.
+- A course with no attendance link has no class list, so its history counts as failed and the home
+  screen retries it (a full portal login) every 10 min. Rare on real dashboards.
+- The calendar is only shown when it's the student's own COE: a sem missing from the portal's COE list,
+  or a failed fetch of it, gives no calendar (never another sem's, which would skew classes left).
+- Hashed `/assets/*` are cached a year (`immutable`); `/brand/*` a day. The HTML stays revalidated.

@@ -8,8 +8,8 @@ import (
 // TimetablePath is the portal's "this week" timetable, relative to the login page URL.
 const TimetablePath = "?option=com_studentdashboard&controller=studentdashboard&task=timetable"
 
-// Class is one slot in the week. The faculty column is deliberately never parsed:
-// no lecturer names in this app.
+// Class is one slot in the week. The faculty column isn't read: the timetable
+// doesn't show it (a course's class list names its lecturer).
 type Class struct {
 	Start string `json:"start"` // "09:30"
 	End   string `json:"end"`   // "10:30"
@@ -28,8 +28,7 @@ type Day struct {
 
 var (
 	reDayCaption = regexp.MustCompile(`<caption>\s*Timetable\s*<span[^>]*>\s*([A-Za-z]+)\s*</span>\s*<span[^>]*>\s*([0-9-]+)\s*</span>\s*</caption>`)
-	reSlot       = regexp.MustCompile(`(?s)<tr>\s*<td[^>]*>\s*(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})\s*</td>\s*` +
-		`<td[^>]*>\s*([^<]*?)\s*</td>\s*<td[^>]*>[^<]*</td>\s*<td[^>]*>\s*([^<]*?)\s*</td>\s*<td[^>]*>\s*([^<]*?)\s*</td>`)
+	reSlotTime   = regexp.MustCompile(`^(\d{1,2}:\d{2})\s*-\s*(\d{1,2}:\d{2})$`)
 )
 
 // ParseTimetable reads the week shown on the portal's timetable page. A page with
@@ -43,12 +42,22 @@ func ParseTimetable(html string) []Day {
 			end = idx[i+1][0]
 		}
 		day := Day{Weekday: html[loc[2]:loc[3]], Date: html[loc[4]:loc[5]], Classes: []Class{}}
-		for _, m := range reSlot.FindAllStringSubmatch(html[loc[1]:end], -1) {
-			code, name, _ := strings.Cut(m[3], " - ")
+		// a slot row: time, course, faculty (skipped), room, batch; cells read as
+		// text so a <br> or <b> inside one doesn't drop the class
+		for _, row := range reTableRow.FindAllStringSubmatch(html[loc[1]:end], -1) {
+			cells := reTD.FindAllStringSubmatch(row[1], -1)
+			if len(cells) < 5 {
+				continue
+			}
+			t := reSlotTime.FindStringSubmatch(html2text(cells[0][2]))
+			if t == nil {
+				continue
+			}
+			code, name, _ := strings.Cut(html2text(cells[1][2]), " - ")
 			day.Classes = append(day.Classes, Class{
-				Start: m[1], End: m[2],
+				Start: t[1], End: t[2],
 				Code: strings.TrimSpace(code), Name: strings.TrimSpace(name),
-				Room: m[4], Batch: m[5],
+				Room: html2text(cells[3][2]), Batch: html2text(cells[4][2]),
 			})
 		}
 		days = append(days, day)

@@ -1,6 +1,7 @@
+import { useMemo } from "react";
 import { cappedTotal, classesLeft, semTotal, squares } from "../lib/history";
 import { todayISO } from "../lib/dates";
-import type { Attendance, Course } from "../lib/types";
+import type { Attendance, ClassRecord, Course } from "../lib/types";
 import { byPercent } from "../lib/verdict";
 import { CourseRow } from "./CourseRow";
 import { FeedbackBox } from "./FeedbackBox";
@@ -11,12 +12,23 @@ type Props = { data: Attendance; open: string | null; onOpen: (code: string | nu
 
 /** One course open at a time, so the page never grows into a scroll marathon. */
 export function Dashboard({ data, open, onOpen, loading }: Props) {
+  const today = todayISO();
+  // per course, once per data change (not on every open/close): the date math walks the whole sem
+  const rows = useMemo(() => {
+    const m = new Map<string, { classes: ClassRecord[] | null; total: number | null; left: number | null }>();
+    for (const c of data.courses) {
+      const h = data.history?.[c.code];
+      m.set(c.code, {
+        classes: squares(c.attended, c.conducted, h?.classes),
+        total: cappedTotal(c, semTotal(h), data.calendar, today),
+        left: classesLeft(c, h, data.calendar, today),
+      });
+    }
+    return m;
+  }, [data, today]);
   const [worst, ...rest] = byPercent(data.courses);
   const toggle = (code: string) => () => onOpen(open === code ? null : code);
-  const dated = (c: Course) => squares(c.attended, c.conducted, data.history?.[c.code]?.classes);
-  const today = todayISO();
-  const total = (c: Course) => cappedTotal(c, semTotal(data.history?.[c.code]), data.calendar, today);
-  const left = (c: Course) => classesLeft(c, data.history?.[c.code], data.calendar, today);
+  const row = (c: Course) => rows.get(c.code)!;
   const panel = (code: string) =>
     open === code && (
       <div className={`border-b border-hair ${code === worst?.code ? "pt-4" : ""}`}>
@@ -25,7 +37,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
     );
   return (
     <>
-      {worst && <Slab course={worst} classes={dated(worst)} total={total(worst)} left={left(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
+      {worst && <Slab course={worst} {...row(worst)} open={open === worst.code} onToggle={toggle(worst.code)} />}
       {worst && panel(worst.code)}
 
       {rest.length > 0 && (
@@ -40,7 +52,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
           </div>
           {rest.map((c) => (
             <div key={c.code}>
-              <CourseRow course={c} classes={dated(c)} total={total(c)} left={left(c)} open={open === c.code} onToggle={toggle(c.code)} />
+              <CourseRow course={c} {...row(c)} open={open === c.code} onToggle={toggle(c.code)} />
               {panel(c.code)}
             </div>
           ))}
@@ -57,7 +69,7 @@ export function Dashboard({ data, open, onOpen, loading }: Props) {
           </p>
           <p>use your own usn. stalking on someone else's is weird without their permission. don't be that guy.</p>
           <p>
-            * predicted bunks count the classes the portal plans for the whole sem, capped at 1 class a week per credit till the last working day (open events once so we have the dates). as you might know that teachers wont take or mark all of them, so
+            * predicted bunks count the classes the portal plans for the whole sem, capped at 1 class a week per credit till the last working day. as you might know that teachers wont take or mark all of them, so
             it's mostly right according to our calculations, but dont rely on us and try to find us if its wrong. <strong className="text-ink">don't bunk just we said to.</strong>
           </p>
         </div>

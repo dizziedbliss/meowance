@@ -7,14 +7,13 @@ import (
 	"strings"
 )
 
-// The three pages behind the dashboard's per-course and history links. Each is
+// The two pages behind the dashboard's per-course and history links. Each is
 // fetched only when the browser asks for it (see Extras), and cached there.
 
 // Paths of the pages the dashboard links to. courseId/secId/semId come from the
 // dashboard's own links (Course.CourseID etc.).
 const (
 	attendanceListPath = "?option=com_studentdashboard&controller=studentdashboard&task=attendencelist&courseId=%s&secId=%s&semId=%s"
-	cieDetailsPath     = "?option=com_studentdashboard&controller=studentdashboard&task=ciedetails&courseId=%s&secId=&semId=%s"
 	examHistoryPath    = "?option=com_history&task=getSemResult&usn=%s"
 )
 
@@ -43,12 +42,8 @@ var (
 	reLecturer    = regexp.MustCompile(`(?s)class="md-card-head-text"[^>]*>\s*([^<]*?)\s*<br>\s*<span>\s*([0-9][0-9A-Za-z]+)\s*-\s*([^<]+?)\s*</span>`)
 	reLegend      = regexp.MustCompile(`(Present|Absent|Still to go)\s*\[\s*(\d+)\s*\]`)
 	reClassRow    = regexp.MustCompile(`(?s)<tr[^>]*>\s*<td>\s*\d+\s*</td>\s*<td>\s*(\d{2})-(\d{2})-(\d{4})\s*</td>\s*<td>\s*(\d{1,2}:\d{2})\s*TO\s*(\d{1,2}:\d{2})\s*</td>\s*<td>\s*(Present|Absent)\s*</td>`)
-	reCIEHeading  = regexp.MustCompile(`<th colspan="\d+">\s*(?:<br/?>)?\s*[^<(]*\(\s*([0-9][0-9A-Za-z]+)\s*\)`)
-	reCIEPoint    = regexp.MustCompile(`\{\s*"xaxis":\s*"([^"]+)",\s*"col1":\s*([0-9.]+),\s*"col2":\s*[0-9.]+,\s*"maxmarks":\s*([0-9.]+),\s*"optainmarks":\s*([0-9.]+)`)
 	reSemTable    = regexp.MustCompile(`(?s)<table class="uk-table uk-table-striped res-table">(.*?)</table>`)
 	reSemCaption  = regexp.MustCompile(`(?s)Semester:\s*(\d+).*?Cumulative Credits\s*:\s*([0-9.]+).*?SGPA:\s*([0-9.]+).*?CGPA\s*:\s*([0-9.]+)`)
-	reResultRow   = regexp.MustCompile(`(?s)<tr>(.*?)</tr>`)
-	reCell        = regexp.MustCompile(`(?s)<td[^>]*>(.*?)</td>`)
 	reTag         = regexp.MustCompile(`<[^>]+>`)
 	reCreditsCard = regexp.MustCompile(`(?s)<h3>\s*(Credits\s+Earned\s+So\s+Far|Credits\s+to\s+be\s+Earned|CGPA)\s*</h3>\s*<p>\s*([0-9.]+)\s*</p>`)
 	reSpaces      = regexp.MustCompile(`\s+`)
@@ -91,34 +86,6 @@ func pad(t string) string {
 		return "0" + t
 	}
 	return t
-}
-
-// CIEStat is one internal test next to the class average.
-type CIEStat struct {
-	Name     string  `json:"name"` // CIE1, CIE2, Final IA
-	Obtained float64 `json:"obtained"`
-	ClassAvg float64 `json:"classAvg"`
-	Max      float64 `json:"max"`
-}
-
-// CIEDetails is one course's CIE page: your marks and the class's.
-type CIEDetails struct {
-	Code  string    `json:"code"`
-	Stats []CIEStat `json:"stats"`
-}
-
-// ParseCIEDetails reads the numbers behind the CIE page's chart.
-func ParseCIEDetails(html string) (*CIEDetails, error) {
-	code := reCIEHeading.FindStringSubmatch(html)
-	points := reCIEPoint.FindAllStringSubmatch(html, -1)
-	if code == nil || len(points) == 0 {
-		return nil, fmt.Errorf("%w: not a cie details page", ErrPortalChanged)
-	}
-	d := &CIEDetails{Code: code[1]}
-	for _, p := range points {
-		d.Stats = append(d.Stats, CIEStat{Name: p[1], ClassAvg: num(p[2]), Max: num(p[3]), Obtained: num(p[4])})
-	}
-	return d, nil
 }
 
 // ExamCourse is one course in a past semester's results.
@@ -176,14 +143,14 @@ func ParseExamHistory(html string) (*ExamHistory, error) {
 			continue
 		}
 		s := SemResult{Sem: int(num(cap[1])), Credits: num(cap[2]), SGPA: num(cap[3]), CGPA: num(cap[4]), Courses: []ExamCourse{}}
-		for _, r := range reResultRow.FindAllStringSubmatch(t[1], -1) {
-			cells := reCell.FindAllStringSubmatch(r[1], -1)
+		for _, r := range reTableRow.FindAllStringSubmatch(t[1], -1) {
+			cells := reTD.FindAllStringSubmatch(r[1], -1)
 			if len(cells) != 10 {
 				continue // the header row
 			}
 			v := make([]string, len(cells))
 			for i, c := range cells {
-				v[i] = strings.TrimSpace(reTag.ReplaceAllString(reComment.ReplaceAllString(c[1], ""), ""))
+				v[i] = strings.TrimSpace(reTag.ReplaceAllString(reComment.ReplaceAllString(c[2], ""), ""))
 			}
 			date := v[5]
 			if strings.HasSuffix(date, "-1970") { // the portal's "no date"

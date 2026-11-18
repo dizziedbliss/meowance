@@ -15,10 +15,15 @@ const text = (h: { before: string; n: number | null; after: string }) => `${h.be
 
 describe("zoneOf", () => {
   it("uses MCE's 85 fine line and 75 dead line", () => {
-    expect(zoneOf(85)).toBe("safe");
-    expect(zoneOf(84.9)).toBe("fine");
-    expect(zoneOf(75)).toBe("fine");
-    expect(zoneOf(74.9)).toBe("dead");
+    expect(zoneOf({ need75: 0, need85: 0 })).toBe("safe");
+    expect(zoneOf({ need75: 0, need85: 1 })).toBe("fine");
+    expect(zoneOf({ need75: 3, need85: 9 })).toBe("dead");
+  });
+  it("follows the exact counts, not the rounded percent", () => {
+    // 594/699 is 84.98%: shown as 85.0, but it still needs a class for 85
+    const edge = c("X", 594, 699, 85, 0, 1, 0);
+    expect(verdict(edge).zone).toBe("fine");
+    expect(text(verdict(edge).head)).toBe("attend 1 more class");
   });
 });
 
@@ -50,6 +55,10 @@ describe("verdict", () => {
 describe("byPercent", () => {
   it("puts the worst subject first", () => {
     expect(byPercent([cloud, sensors, ai]).map((x) => x.code)).toEqual(["23AI704D", "23AI701", "23OEEC71"]);
+  });
+  it("puts a course with no classes held last, not on the big slab", () => {
+    const fresh = c("NEW", 0, 0, 0, 0, 0, 0);
+    expect(byPercent([fresh, cloud, ai]).map((x) => x.code)).toEqual(["23AI704D", "23AI701", "NEW"]);
   });
 });
 

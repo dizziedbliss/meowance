@@ -42,7 +42,7 @@ func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
 		t.Fatal(err)
 	}
 	extraPages := map[string][]byte{}
-	for task, file := range map[string]string{"attendencelist": "attendancelist.html", "ciedetails": "ciedetails.html", "getSemResult": "examhistory.html"} {
+	for task, file := range map[string]string{"attendencelist": "attendancelist.html", "getSemResult": "examhistory.html"} {
 		b, err := os.ReadFile(filepath.Join("testdata", file))
 		if err != nil {
 			t.Fatal(err)
@@ -64,7 +64,7 @@ func fakePortal(t *testing.T, loginPage string) (*httptest.Server, *int32) {
 					w.Write(tt)
 				case "calenderdisplay":
 					w.Write(cal)
-				case "attendencelist", "ciedetails", "getSemResult":
+				case "attendencelist", "getSemResult":
 					w.Write(extraPages[r.URL.Query().Get("task")])
 				default:
 					w.Write(dash)
@@ -325,22 +325,19 @@ func TestFetchOnlyAskedExtras(t *testing.T) {
 func TestFetchHistoryPages(t *testing.T) {
 	srv, _ := fakePortal(t, loginFixture(t))
 	hits := pageHits(t, srv)
-	want := Extras{History: []string{"23AI701", "NOT-A-COURSE"}, CIE: []string{"23AI701"}, Exams: true}
+	want := Extras{History: []string{"23AI701", "NOT-A-COURSE"}, Exams: true}
 	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, want)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := [3]int32{hitCount(hits, "attendencelist"), hitCount(hits, "ciedetails"), hitCount(hits, "getSemResult")}; got != [3]int32{1, 1, 1} {
-		t.Errorf("fetched attendance list/cie/exams %v times, want 1 each (unknown codes skipped)", got)
+	if got := [2]int32{hitCount(hits, "attendencelist"), hitCount(hits, "getSemResult")}; got != [2]int32{1, 1} {
+		t.Errorf("fetched attendance list/exams %v times, want 1 each (unknown codes skipped)", got)
 	}
 	if h := s.History["23AI701"]; h == nil || len(h.Classes) != 24 {
 		t.Errorf("history = %+v", s.History)
 	}
 	if _, asked := s.History["NOT-A-COURSE"]; asked {
 		t.Error("a code not on the dashboard should be left out, not fetched")
-	}
-	if d := s.CIE["23AI701"]; d == nil || len(d.Stats) != 3 {
-		t.Errorf("cie = %+v", s.CIE)
 	}
 	if s.Exams == nil || len(s.Exams.Sems) != 6 {
 		t.Errorf("exams = %+v", s.Exams)
@@ -400,5 +397,113 @@ func TestCalendarFollowsTheStudentsSemester(t *testing.T) {
 	slices.Sort(years)
 	if !slices.Equal(years, []string{"2", "3"}) {
 		t.Errorf("calendar pages fetched = %v, want the default (2) then the sem-3 one (3)", years)
+	}
+}
+
+// A course the browser already has for the same counts isn't fetched again;
+// one whose counts moved is.
+func TestFetchSkipsUnchangedHistory(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	hits := pageHits(t, srv)
+	want := Extras{History: []string{"23AI701", "23AI702"}, Have: map[string]string{"23AI701": "18/24", "23AI702": "22/25"}}
+	s, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, want)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := hitCount(hits, "attendencelist"); n != 1 {
+		t.Errorf("fetched %d attendance lists, want 1 (23AI701 unchanged at 18/24)", n)
+	}
+	if _, ok := s.History["23AI701"]; ok {
+		t.Error("an unchanged course should be left out of the history")
+	}
+	if s.History["23AI702"] == nil {
+		t.Error("23AI702 changed (22/25 -> 23/26) and should be fetched")
+	}
+}
+
+// Once the login POST is out, a failure isn't retried: the portal may already
+// have counted that birthday, and a retry would count it again.
+func TestFetchNeverResendsTheLogin(t *testing.T) {
+	var posts int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost {
+			atomic.AddInt32(&posts, 1)
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		http.SetCookie(w, &http.Cookie{Name: "sess", Value: "s1", Path: "/"})
+		w.Write([]byte(loginFixture(t)))
+	}))
+	defer srv.Close()
+	_, err := newTestClient(srv.URL).Fetch(context.Background(), testUSN, testDOB, Extras{})
+	if !errors.Is(err, ErrPortalDown) {
+		t.Fatalf("err = %v, want ErrPortalDown", err)
+	}
+	if posts != 1 {
+		t.Fatalf("posted the login %d times, want 1", posts)
+	}
+}
+
+// The calendar is the same for everyone in a sem: a warm client fetches it for
+// the first login and reuses it for the next, never across semesters.
+func TestCalendarCachedPerSemester(t *testing.T) {
+	srv, _ := fakePortal(t, loginFixture(t))
+	hits := pageHits(t, srv)
+	c := newTestClient(srv.URL)
+	for i := range 2 {
+		s, err := c.Fetch(context.Background(), testUSN, testDOB, Extras{Calendar: true})
+		if err != nil || s.Calendar == nil {
+			t.Fatalf("login %d: calendar %v, err %v", i, s.Calendar, err)
+		}
+	}
+	if n := hitCount(hits, "calenderdisplay"); n != 1 {
+		t.Errorf("fetched the calendar %d times over two same-sem logins, want 1", n)
+	}
+	c.calendars.m["2|UG|7"] = cachedCalendar{c.calendars.m["2|UG|7"].cal, time.Now().Add(-calendarTTL)} // expired
+	if _, err := c.Fetch(context.Background(), testUSN, testDOB, Extras{Calendar: true}); err != nil {
+		t.Fatal(err)
+	}
+	if n := hitCount(hits, "calenderdisplay"); n != 2 {
+		t.Errorf("an expired calendar should be fetched again (hits %d, want 2)", n)
+	}
+}
+
+// Never another sem's calendar: if the student's own COE page fails, or their
+// sem isn't listed, there's no calendar, and nothing is cached for that sem.
+func TestCalendarNeverFallsBackToAnotherSem(t *testing.T) {
+	for _, c := range []struct{ name, sem string }{{"own page fails", "SEM 03"}, {"sem not listed", "SEM 04"}} {
+		t.Run(c.name, func(t *testing.T) {
+			srv, _ := fakePortal(t, loginFixture(t))
+			inner := srv.Config.Handler
+			srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query()
+				if r.Method == http.MethodGet && q.Get("task") == "calenderdisplay" && q.Get("yearId") == "3" {
+					w.WriteHeader(http.StatusBadGateway) // the sem-3 page is down
+					return
+				}
+				if r.Method == http.MethodGet && (q.Get("task") == "" || q.Get("task") == "dashboard") {
+					rec := httptest.NewRecorder()
+					inner.ServeHTTP(rec, r)
+					for k, v := range rec.Header() {
+						w.Header()[k] = v
+					}
+					w.WriteHeader(rec.Code)
+					w.Write([]byte(strings.ReplaceAll(rec.Body.String(), "SEM 07", c.sem)))
+					return
+				}
+				inner.ServeHTTP(w, r)
+			})
+			cl := newTestClient(srv.URL)
+			s, err := cl.Fetch(context.Background(), testUSN, testDOB, Extras{Calendar: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Calendar != nil {
+				t.Error("got a calendar that isn't this sem's")
+			}
+			if len(cl.calendars.m) != 0 {
+				t.Errorf("cached %v", cl.calendars.m)
+			}
+		})
 	}
 }

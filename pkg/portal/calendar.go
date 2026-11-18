@@ -57,21 +57,41 @@ var (
 		`(?:\s+to\s+([A-Za-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?)?\s*-\s*(.+)$`)
 )
 
-var reCOELink = regexp.MustCompile(`(?i)yearId=([0-9]+)'>\s*COE[^<]*?\bUG\s+([0-9]+)(?:st|nd|rd|th)\s+SEM`)
+var reCOELink = regexp.MustCompile(`(?i)yearId=([0-9]+)'>\s*COE[^<]*?\b(UG|MCA|M\.?TECH)\s+([0-9]+)(?:st|nd|rd|th)\s+SEM`)
 
-// CalendarYearFor finds, in a calendar page's list of COEs, the id of the UG
-// calendar for this semester ("07" or "7"); "" when the list has none.
-func CalendarYearFor(html, sem string) string {
+// programme is which COE list a student's branch ("B.E-CA", "MCA", "M.Tech-…")
+// reads from: UG, MCA or MTECH. Anything unrecognised is UG.
+func programme(branch string) string {
+	b := strings.ToUpper(strings.ReplaceAll(branch, ".", ""))
+	switch {
+	case strings.HasPrefix(b, "MCA"):
+		return "MCA"
+	case strings.HasPrefix(b, "MTECH"):
+		return "MTECH"
+	}
+	return "UG"
+}
+
+// CalendarYearFor finds, in a calendar page's list of COEs, the id of this
+// programme's calendar for this semester ("07" or "7"); "" when the list has
+// none. When two match (an old year still listed), the newest (highest id) wins.
+func CalendarYearFor(html, branch, sem string) string {
 	want, err := strconv.Atoi(strings.TrimSpace(sem))
 	if err != nil {
 		return ""
 	}
+	prog, best := programme(branch), -1
 	for _, m := range reCOELink.FindAllStringSubmatch(html, -1) {
-		if n, _ := strconv.Atoi(m[2]); n == want {
-			return m[1]
+		n, _ := strconv.Atoi(m[3])
+		id, _ := strconv.Atoi(m[1])
+		if n == want && strings.ReplaceAll(strings.ToUpper(m[2]), ".", "") == prog && id > best {
+			best = id
 		}
 	}
-	return ""
+	if best < 0 {
+		return ""
+	}
+	return strconv.Itoa(best)
 }
 
 // ParseCalendar reads the calendar-of-events page. It returns nil if the page

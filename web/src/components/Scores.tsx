@@ -101,8 +101,8 @@ export function Scores({ data, view, onView, loading }: Props) {
             </div>
             {(c.cie ?? []).length > 0 && (
               <ul className="mt-3 flex flex-wrap gap-x-6 gap-y-1.5 font-mono text-xs">
-                {(c.cie ?? []).map((p) => (
-                  <li key={p.name} className="text-ink-2">
+                {(c.cie ?? []).map((p, i) => (
+                  <li key={`${p.name}-${i}`} className="text-ink-2">
                     <span className="text-ink">{partLabel(p.name)}</span>{" "}
                     {p.absent ? (
                       <span className="text-dead">ghosted</span>

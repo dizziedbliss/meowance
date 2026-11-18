@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { dayMonth, todayISO } from "../lib/dates";
+import { dayMonth, mondayOf, todayISO, todayName } from "../lib/dates";
 import type { Attendance } from "../lib/types";
-import { classesLeft } from "../lib/history";
-import { classTag, courseName, room, todayName, trimTime } from "../lib/week";
+import { cappedTotal, semTotal } from "../lib/history";
+import { classTag, courseName, room, trimTime } from "../lib/week";
 import { SubTabs } from "./SubTabs";
 
 /** dd-mm-yyyy (timetable) → yyyy-mm-dd, to compare with today. */
@@ -13,11 +13,13 @@ const tone = { dead: "text-dead", fine: "text-fine", safe: "text-safe", mut: "te
 /** This week, day by day, every class tagged by whether that subject can afford a bunk. */
 export function Timetable({ data, loading }: { data: Attendance; loading: boolean }) {
   const days = data.timetable;
-  const today = todayName();
+  const now = todayISO();
+  // a refetch that failed on monday leaves last week's copy: show it, but never as "today"
+  const lastWeek = !!days?.length && iso(days[days.length - 1].date) < mondayOf(now);
+  const today = lastWeek ? "" : todayName();
   const total = days?.reduce((n, d) => n + d.classes.length, 0) ?? 0;
   // one day at a time: today, else the next day with classes, else the first
   const [picked, setPicked] = useState<string | null>(null);
-  const now = todayISO();
   const start = days?.find((d) => d.weekday === today) ?? days?.find((d) => iso(d.date) >= now) ?? days?.[0];
   const shown = days?.find((d) => d.date === picked) ?? start;
 
@@ -49,7 +51,9 @@ export function Timetable({ data, loading }: { data: Attendance; loading: boolea
         <Empty line="no classes this week. suspicious. enjoy it." />
       ) : (
         <>
-          {!days.some((d) => d.weekday === today) && (
+          {lastWeek ? (
+            <p className="mt-6 font-display text-xl font-bold text-fine">this is last week's timetable heh. hit sync for this week's.</p>
+          ) : !days.some((d) => d.weekday === today) && (
             <p className="mt-6 font-display text-xl font-bold text-ink-2">no classes today. go outside, it's free.</p>
           )}
           <SubTabs
@@ -75,7 +79,9 @@ export function Timetable({ data, loading }: { data: Attendance; loading: boolea
                 <ul>
                   {d.classes.map((c, i) => {
                     const course = data.courses.find((x) => x.code === c.code);
-                    const left = course ? classesLeft(course, data.history?.[c.code], data.calendar, now) : null;
+                    // a guess shown as a count, so the conservative one (capped by credits), never the portal's padded "still to go"
+                    const capped = course ? cappedTotal(course, semTotal(data.history?.[c.code]), data.calendar, now) : null;
+                    const left = course && capped != null ? Math.max(0, capped - course.conducted) : null;
                     const tag = classTag(c, data.courses, left);
                     return (
                       <li

@@ -20,9 +20,10 @@ export const toggleProps = (open: boolean, onToggle: () => void, label: string) 
   },
 });
 
-type RowProps = { course: Course; classes: ClassRecord[] | null; total: number | null; left: number | null; open: boolean; onToggle: () => void };
+/** A course on the dashboard: the slab (the worst one) and every row take the same. */
+export type CourseProps = { course: Course; classes: ClassRecord[] | null; total: number | null; left: number | null; open: boolean; onToggle: () => void };
 
-export function CourseRow({ course, classes, total, left, open, onToggle }: RowProps) {
+export function CourseRow({ course, classes, total, left, open, onToggle }: CourseProps) {
   const v = verdict(course, left);
   const guess = total && !v.cooked ? predicted(course, total) : null; // an extra, never the main verdict
   return (

@@ -8,7 +8,7 @@ import { Logo } from "./components/Logo";
 import { Scores, type ScoresView } from "./components/Scores";
 import { Timetable } from "./components/Timetable";
 import { ApiError, errorCopy, fetchAttendance } from "./lib/api";
-import { type Extra, merge, stale, type Stored } from "./lib/cache";
+import { type Extra, merge, stale, type Stored, wire } from "./lib/cache";
 import { dayMonth } from "./lib/dates";
 import type { Attendance } from "./lib/types";
 import { loadCreds, loadData, saveData, wipe } from "./lib/vault";
@@ -16,16 +16,15 @@ import { loadCreds, loadData, saveData, wipe } from "./lib/vault";
 /** The portal prints names in caps: "STUDENT" → "Student". */
 const titleCase = (s: string) => s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.toUpperCase());
 
-/** The page a tab needs besides the dashboard. */
 /** The pages the screen on view needs besides the dashboard. */
 function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView): Extra[] {
   if (!data) return [];
-  const each = (kind: "history") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
+  const histories = data.courses.map((c) => `history:${c.code}` as const);
   if (tab === "timetable") return ["timetable", "calendar"]; // the calendar is what the tags' classes-left count needs
   if (tab === "events") return ["calendar"];
   if (tab === "notes") return []; // notes load from their own endpoint, not the portal
   if (tab === "scores") return scores === "now" ? [] : ["exams"];
-  return [...each("history"), "calendar"]; // dated tally boxes (cached until a course's counts change) + the dates the classes-left math needs
+  return [...histories, "calendar"]; // dated tally boxes (cached until a course's counts change) + the dates the classes-left math needs
 }
 
 export default function App() {
@@ -38,6 +37,7 @@ export default function App() {
   const [scoresView, setScoresView] = useState<ScoresView>("now");
   const [open, setOpen] = useState<string | null>(null); // the dashboard course showing its receipts
   const tried = useRef(new Set<Extra>()); // auto-fetched on this view already: a failing page isn't retried in a loop
+  const session = useRef(0); // bumped on logout: a fetch that lands after it must not log the student back in
 
   useEffect(() => {
     document.body.classList.toggle("has-nav", data !== null);
@@ -51,16 +51,20 @@ export default function App() {
   /** Logs in again and refreshes the dashboard, plus these extras. */
   async function refresh(extras: Extra[]) {
     if (syncing) return;
+    const mine = session.current;
     setSyncing(true);
     setSyncErr(null);
     try {
       const c = await loadCreds();
       if (!c) throw new Error("no creds");
-      const a = await fetchAttendance(c.usn, c.dob, extras);
+      // courses whose class list is cached go with its counts: the server skips the unchanged ones
+      const a = await fetchAttendance(c.usn, c.dob, wire(storeRef.current, extras));
+      if (session.current !== mine) return; // logged out meanwhile: drop it
       const s = merge(storeRef.current, a, extras, Date.now());
       saveData(s);
       keep(s);
     } catch (x) {
+      if (session.current !== mine) return;
       setSyncErr(x instanceof ApiError ? errorCopy[x.code] : "lost your login. log out and back in to sync.");
     } finally {
       setSyncing(false);
@@ -71,6 +75,7 @@ export default function App() {
   const viewKey = `${tab}|${scoresView}`;
   useEffect(() => {
     tried.current = new Set();
+    setSyncErr(null); // an error belongs to the screen it happened on
   }, [viewKey]);
 
   // A screen fetches its pages only when the cached copies are missing or stale,
@@ -91,6 +96,7 @@ export default function App() {
   };
 
   async function logout() {
+    session.current++;
     await wipe();
     keep(null);
     setTab(null);

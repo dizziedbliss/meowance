@@ -69,10 +69,19 @@ func TestCalendarYearFor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for sem, want := range map[string]string{"07": "2", "7": "2", "05": "1", "03": "3", "01": "4", "04": "", "x": ""} {
-		if got := CalendarYearFor(string(b), sem); got != want {
-			t.Errorf("sem %q: id %q, want %q", sem, got, want)
+	for _, c := range []struct{ branch, sem, want string }{
+		{"B.E-AA", "07", "2"}, {"B.E-AA", "7", "2"}, {"B.E-AA", "05", "1"}, {"B.E-AA", "03", "3"},
+		{"B.E-AA", "01", "4"}, {"B.E-AA", "04", ""}, {"B.E-AA", "x", ""},
+		{"MCA", "03", "11"}, {"M.Tech-CS", "3", "12"}, {"MCA", "07", ""},
+	} {
+		if got := CalendarYearFor(string(b), c.branch, c.sem); got != c.want {
+			t.Errorf("%s sem %q: id %q, want %q", c.branch, c.sem, got, c.want)
 		}
+	}
+	// an old year still listed for the same sem: the newer (higher id) one wins
+	two := "<a href='x?yearId=3'>COE FOR THE UG 3rd SEMESTER 2025-2026</a><a href='x?yearId=9'>COE FOR THE UG 3rd SEMESTER 2026-2027</a>"
+	if got := CalendarYearFor(two, "B.E-AA", "3"); got != "9" {
+		t.Errorf("two sem-3 COEs: id %q, want 9", got)
 	}
 }
 

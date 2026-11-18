@@ -4,8 +4,9 @@
 //
 // All functions depend ONLY on attended + conducted + the target fraction, so
 // they never rely on the semester's total planned classes (which MCE's portal
-// pads retroactively and cannot be trusted mid-semester). See the project plan's
-// "Data-quality caveats" for why that matters.
+// pads retroactively and cannot be trusted mid-semester). The predictions that do
+// use that total (classes left, predicted bunks) live in web/src/lib/history.ts
+// and verdict.ts, and only ever show as extras next to these numbers.
 package attend
 
 import "math"

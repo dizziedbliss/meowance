@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { isoDayMonth, todayISO } from "../lib/dates";
 import {
   type Note,
@@ -44,6 +44,8 @@ export function Notes({ data }: { data: Attendance }) {
 
   const code = normCode(tab === "other" ? other : tab);
   const ok = validCode(code);
+  const shownCode = useRef(code); // the course on screen now, for uploads that finish after a switch
+  shownCode.current = code;
 
   useEffect(() => {
     let live = true;
@@ -172,10 +174,11 @@ export function Notes({ data }: { data: Attendance }) {
           code={code}
           other={tab === "other"}
           onDone={(n) => {
+            setMsg({ text: "posted!! ur basically a topper now heh", bad: false });
+            if (shownCode.current !== code) return; // switched courses mid-upload: it's in its own course, not this list
             setAdding(false);
             setList((l) => [n, ...(l ?? [])]);
             setMine((m) => new Set(m).add(n.id));
-            setMsg({ text: "posted!! ur basically a topper now heh", bad: false });
           }}
         />
       )}

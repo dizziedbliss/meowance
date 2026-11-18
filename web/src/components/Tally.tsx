@@ -12,7 +12,7 @@ export function Tally({ course: c, zone, classes, left = null, onSlab, pop, clas
   let k = 0;
   if (classes) {
     // the real order, each box dated (hover on pc; the row's receipts list the bunks on phones)
-    for (const cl of classes) sq.push(<i key={cl.date + cl.start} className={cl.present ? "at" : "ms"} data-tip={tip(cl)} />);
+    for (const [i, cl] of classes.entries()) sq.push(<i key={`c${i}`} className={cl.present ? "at" : "ms"} data-tip={tip(cl)} />);
   } else {
     for (let i = 0; i < c.attended; i++) sq.push(<i key={`a${i}`} className="at" />);
     for (let i = 0; i < c.conducted - c.attended; i++) sq.push(<i key={`m${i}`} className="ms" />);

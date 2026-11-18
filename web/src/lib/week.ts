@@ -13,7 +13,7 @@ export function classTag(c: Class, courses: Course[], left: number | null = null
 function baseTag(c: Class, courses: Course[]): ClassTag | null {
   const course = courses.find((x) => x.code === c.code);
   if (!course || course.conducted === 0) return null;
-  switch (zoneOf(course.percent)) {
+  switch (zoneOf(course)) {
     case "dead":
       return { text: "don't you dare", tone: "dead" };
     case "fine":
@@ -55,4 +55,3 @@ export function room(r: string): string {
 
 export const trimTime = (t: string) => t.replace(/^0/, "");
 
-export const todayName = () => new Date().toLocaleDateString("en-US", { weekday: "long" });

@@ -76,12 +76,33 @@ describe("cappedTotal", () => {
     // 2 days left, 3 credits -> 1 class
     expect(cappedTotal(c(3, 40), 80, cal, "2026-11-13")).toBe(41);
   });
-  it("counts to the last working day, not the end of the exam period", () => {
-    expect(classesLeft(c(4, 40), { present: 40, absent: 0, stillToGo: 20, classes: [] } as never, cal, "2026-11-13")).toBeLessThanOrEqual(2);
-  });
   it("keeps a smaller portal total; no calendar means no guess", () => {
     expect(cappedTotal(c(3, 10), 30, cal, "2026-08-03")).toBe(30);
     expect(cappedTotal(c(3, 10), 80, null, "2026-08-03")).toBeNull();
     expect(cappedTotal(c(3, 10), null, cal, "2026-08-03")).toBe(45); // no history: the two caps decide
+  });
+});
+
+describe("classesLeft (out of reach: never undercounts)", () => {
+  const cal = {
+    start: "2026-08-03", end: "2026-12-05", holidays: [], examDays: [],
+    events: [{ from: "2026-11-14", to: "2026-11-14", title: "LAST WORKING DAY", kind: "lastday" as const }],
+  };
+  const c = (credits: number, conducted: number) => ({ credits, conducted }) as Course;
+  const h = (present: number, absent: number, stillToGo: number) => ({ present, absent, stillToGo, classes: [] }) as never;
+  it("is the portal's planned total minus held, with no credit cap", () => {
+    // a 4-credit course meeting 5x a week: 70 planned, 40 held -> 30 left (the credit cap would say ~8)
+    expect(classesLeft(c(4, 40), h(30, 10, 30), cal, "2026-10-12")).toBe(30);
+  });
+  it("is 0 after the last working day, even while exams run on", () => {
+    expect(classesLeft(c(4, 40), h(30, 10, 30), cal, "2026-11-20")).toBe(0);
+    expect(classesLeft(c(4, 40), h(30, 10, 30), cal, "2026-11-14")).toBe(30);
+  });
+  it("says nothing without the history; works without the calendar", () => {
+    expect(classesLeft(c(4, 40), null, cal, "2026-10-12")).toBeNull();
+    expect(classesLeft(c(4, 40), h(30, 10, 30), null, "2026-10-12")).toBe(30);
+  });
+  it("never goes negative", () => {
+    expect(classesLeft(c(4, 50), h(30, 10, 0), cal, "2026-10-12")).toBe(0);
   });
 });

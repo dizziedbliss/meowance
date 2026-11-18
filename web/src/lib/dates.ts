@@ -13,10 +13,19 @@ export function isoDayMonth(s: string): string {
   return m ? `${+m[2]} ${months[+m[1] - 1] ?? ""}`.trim() : s;
 }
 
-/** Today in the viewer's timezone, as YYYY-MM-DD. */
+const IST_MS = 5.5 * 3_600_000; // IST is UTC+5:30, no DST
+const ist = (now: Date) => new Date(now.getTime() + IST_MS); // read with getUTC*
+
+/** Today in India (the portal's dates are IST), as YYYY-MM-DD, wherever the viewer is. */
 export function todayISO(now = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}`;
+  return ist(now).toISOString().slice(0, 10);
+}
+
+/** The Monday of that YYYY-MM-DD's week (mon–sun), as YYYY-MM-DD. */
+export function mondayOf(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+  return d.toISOString().slice(0, 10);
 }
 
 /** Whole days from a to b (YYYY-MM-DD), b later = positive. */
@@ -32,7 +41,12 @@ export function shortDate(s: string): string {
 
 /** The hour (0–23) in India, wherever the viewer is. */
 export function istHour(now = new Date()): number {
-  return new Date(now.getTime() + 5.5 * 3_600_000).getUTCHours(); // IST is UTC+5:30, no DST
+  return ist(now).getUTCHours();
+}
+
+/** Today's weekday in India, "Monday". */
+export function todayName(now = new Date()): string {
+  return ist(now).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
 }
 
 /** The portal goes down most nights, roughly midnight to 6am IST. */

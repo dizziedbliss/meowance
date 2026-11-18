@@ -14,7 +14,9 @@ export const BANDS: Band[] = [
   { min: 40, grade: "P", points: 4 },
 ];
 const FAIL: Band = { min: 0, grade: "F", points: 0 };
-const SEE_MAX = 50;
+/** The handbook scheme: cie out of 50 + see out of 50 (the portal's see is /50; the paper is /100). */
+export const CIE_MAX = 50;
+export const SEE_MAX = 50;
 /** Handbook: the see needs 35% on its own to pass, whatever the cie. */
 const SEE_PASS = 17.5;
 
