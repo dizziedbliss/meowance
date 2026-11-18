@@ -8,6 +8,12 @@ export type Post = {
 
 export const posts: Post[] = [
   {
+    when: "18 nov",
+    title: "Buggsss",
+    body: "fixed all of em and also CONTRIBUTIONS ARE OPENNNN!! u can contribute to shi over github, i'll review n accept PR, Max out!",
+    sign: "Max!!",
+  },
+  {
     when: "15 nov",
     title: "Notesss sharinggg",
     body: "ITS ONNNNNNNNNN, but with limits",

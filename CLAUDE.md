@@ -125,6 +125,8 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   avatar, and invented counts, class dates, CIE marks, exam dates, grades, section). Scrubbing names
   isn't enough; never commit real student data or HARs. Verify by parsing old vs new values.
 - Go: stdlib-first. Web: exact-pinned deps, `npm ci`.
+- Contributions are open (`CONTRIBUTING.md`); `components/Contribute.tsx` pins the repo link on the login
+  and home screens. Outside PRs still go through Max's review before `main` (merging ships).
 - `web/public/privacy/` and `terms/` are static pages (linked from the Google OAuth consent screen). When the
   app starts storing or sending something new about students, update `privacy/` in the same PR.
 

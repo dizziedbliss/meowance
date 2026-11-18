@@ -4,6 +4,7 @@ import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "../lib/api";
 import { portalAsleep } from "../lib/dates";
 import { type Extra, merge, type Stored } from "../lib/cache";
 import { saveCreds, saveData } from "../lib/vault";
+import { Contribute } from "./Contribute";
 import { Logo } from "./Logo";
 
 /** What the button says while the portal takes its sweet time (one line every 1.6s, the last one stays). */
@@ -131,6 +132,7 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
             <p>Still scared to try? don't log in. </p>
             <p>Trying to use someone else's usn? weird. please don't stalk.</p>
           </div>
+          <Contribute className="mt-8" />
         </div>
 
         <aside aria-label="Community board" className="border-t border-hair-2 pt-[34px] md:border-t-0 md:border-l md:pt-0 md:pl-10">

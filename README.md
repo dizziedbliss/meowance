@@ -21,6 +21,8 @@ Tap a course to see when you bunked (hover a box on desktop):
 The screenshots use the mock data in `pkg/portal/testdata`: every name, number, date and grade
 in it is invented. It is nobody's real record.
 
+**Contributions are open:** see [CONTRIBUTING.md](CONTRIBUTING.md). Open a PR and Max reviews it.
+
 ## What it shows
 
 - **Dashboard:** every course's attendance, worst first. Each class is a box in real order:
