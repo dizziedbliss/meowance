@@ -114,6 +114,14 @@ type Extras struct {
 	AllHistory bool
 }
 
+// Counts is a course's attended/conducted as the browser sends it in a
+// "history:<code>@<counts>" hint ("20/25"); web/src/lib/cache.ts writes the same.
+func (co Course) Counts() string { return fmt.Sprintf("%d/%d", co.Attended, co.Conducted) }
+
+// Unchanged reports whether the browser already has this course's class list
+// for the counts the dashboard shows now, so that page needn't be fetched.
+func (e Extras) Unchanged(co Course) bool { return e.Have[co.Code] == co.Counts() }
+
 // maxParallel caps the extra pages fetched at once, so a fresh browser asking
 // for everything doesn't hit the portal (and the proxy) with a burst.
 const maxParallel = 6
@@ -326,7 +334,7 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 	}
 	for _, code := range want.History {
 		co, ok := courses[code]
-		if !ok || co.CourseID == "" || want.Have[code] == fmt.Sprintf("%d/%d", co.Attended, co.Conducted) {
+		if !ok || co.CourseID == "" || want.Unchanged(co) {
 			continue // not this sem's course, no class list to open, or unchanged since the browser's copy
 		}
 		snap.History[code] = nil

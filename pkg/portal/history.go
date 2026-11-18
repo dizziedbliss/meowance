@@ -44,8 +44,6 @@ var (
 	reClassRow    = regexp.MustCompile(`(?s)<tr[^>]*>\s*<td>\s*\d+\s*</td>\s*<td>\s*(\d{2})-(\d{2})-(\d{4})\s*</td>\s*<td>\s*(\d{1,2}:\d{2})\s*TO\s*(\d{1,2}:\d{2})\s*</td>\s*<td>\s*(Present|Absent)\s*</td>`)
 	reSemTable    = regexp.MustCompile(`(?s)<table class="uk-table uk-table-striped res-table">(.*?)</table>`)
 	reSemCaption  = regexp.MustCompile(`(?s)Semester:\s*(\d+).*?Cumulative Credits\s*:\s*([0-9.]+).*?SGPA:\s*([0-9.]+).*?CGPA\s*:\s*([0-9.]+)`)
-	reResultRow   = regexp.MustCompile(`(?s)<tr>(.*?)</tr>`)
-	reCell        = regexp.MustCompile(`(?s)<td[^>]*>(.*?)</td>`)
 	reTag         = regexp.MustCompile(`<[^>]+>`)
 	reCreditsCard = regexp.MustCompile(`(?s)<h3>\s*(Credits\s+Earned\s+So\s+Far|Credits\s+to\s+be\s+Earned|CGPA)\s*</h3>\s*<p>\s*([0-9.]+)\s*</p>`)
 	reSpaces      = regexp.MustCompile(`\s+`)
@@ -145,14 +143,14 @@ func ParseExamHistory(html string) (*ExamHistory, error) {
 			continue
 		}
 		s := SemResult{Sem: int(num(cap[1])), Credits: num(cap[2]), SGPA: num(cap[3]), CGPA: num(cap[4]), Courses: []ExamCourse{}}
-		for _, r := range reResultRow.FindAllStringSubmatch(t[1], -1) {
-			cells := reCell.FindAllStringSubmatch(r[1], -1)
+		for _, r := range reTableRow.FindAllStringSubmatch(t[1], -1) {
+			cells := reTD.FindAllStringSubmatch(r[1], -1)
 			if len(cells) != 10 {
 				continue // the header row
 			}
 			v := make([]string, len(cells))
 			for i, c := range cells {
-				v[i] = strings.TrimSpace(reTag.ReplaceAllString(reComment.ReplaceAllString(c[1], ""), ""))
+				v[i] = strings.TrimSpace(reTag.ReplaceAllString(reComment.ReplaceAllString(c[2], ""), ""))
 			}
 			date := v[5]
 			if strings.HasSuffix(date, "-1970") { // the portal's "no date"

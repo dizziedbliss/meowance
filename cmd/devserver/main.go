@@ -10,7 +10,6 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -55,15 +54,15 @@ func (f fixture) Fetch(ctx context.Context, usn string, dob time.Time, want port
 	if want.Exams {
 		s.Exams, _ = portal.ParseExamHistory(f.examHistory)
 	}
-	counts := map[string]string{}
+	courses := map[string]portal.Course{}
 	for _, c := range d.Courses {
-		counts[c.Code] = fmt.Sprintf("%d/%d", c.Attended, c.Conducted)
+		courses[c.Code] = c
 	}
 	for _, code := range want.History {
 		if s.History == nil {
 			s.History = map[string]*portal.CourseHistory{}
 		}
-		if want.Have[code] == counts[code] && counts[code] != "" {
+		if c, ok := courses[code]; ok && want.Unchanged(c) {
 			continue // unchanged since the browser's copy, like the real client
 		}
 		h, _ := portal.ParseAttendanceList(f.attendanceList)

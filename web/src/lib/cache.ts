@@ -36,18 +36,20 @@ function weekStart(t: number): number {
 }
 
 const courseOf = (a: Attendance, code: string): Course | undefined => a.courses.find((c) => c.code === code);
+/** "history:23AI701" → "23AI701". */
+const codeOf = (e: string) => e.slice("history:".length);
 
 /** What a page reflects in this dashboard; it's refetched when that changes. */
 function basisOf(a: Attendance, e: Extra): string {
   if (e === "exams" || e === "calendar") return a.student.sem; // each semester has its own calendar
   if (e === "timetable") return `${a.student.sem}|${a.student.section}`; // a new sem or section is a new timetable
-  const c = courseOf(a, e.slice("history:".length));
+  const c = courseOf(a, codeOf(e));
   return c ? `${c.attended}/${c.conducted}` : "";
 }
 
 function get(a: Attendance, e: Extra): unknown {
   if (e === "timetable" || e === "calendar" || e === "exams") return a[e];
-  return a.history?.[e.slice("history:".length)];
+  return a.history?.[codeOf(e)];
 }
 
 function set(a: Attendance, e: Extra, v: unknown): void {
@@ -55,13 +57,13 @@ function set(a: Attendance, e: Extra, v: unknown): void {
     (a as Record<string, unknown>)[e] = v;
     return;
   }
-  a.history = { ...a.history, [e.slice("history:".length)]: v as CourseHistory | null };
+  a.history = { ...a.history, [codeOf(e)]: v as CourseHistory | null };
 }
 
 /** Whether this extra must be fetched (never fetched, failed a while ago, stale, or what it reflects changed). */
 export function needs(s: Stored | null, e: Extra, now: number): boolean {
   if (!s) return true;
-  if (e.startsWith("history:") && !courseOf(s.a, e.slice("history:".length))) return false; // not a course this sem: nothing to fetch
+  if (e.startsWith("history:") && !courseOf(s.a, codeOf(e))) return false; // not a course this sem: nothing to fetch
   const failed = s.failed?.[e];
   if (failed !== undefined && now - failed < RETRY_AFTER) return false;
   const got = s.got[e];
@@ -97,7 +99,7 @@ export function merge(prev: Stored | null, next: Attendance, asked: Extra[], now
     for (const f of ["timetable", "calendar", "exams"] as const) if (same.a[f] !== undefined) set(a, f, same.a[f]);
     // only this sem's courses: last sem's class lists would pile up in localStorage forever
     const codes = new Set(next.courses.map((c) => c.code));
-    const keepCode = (e: string) => !e.startsWith("history:") || codes.has(e.slice("history:".length));
+    const keepCode = (e: string) => !e.startsWith("history:") || codes.has(codeOf(e));
     if (same.a.history) a.history = Object.fromEntries(Object.entries(same.a.history).filter(([code]) => codes.has(code)));
     for (const m of [out.got, out.basis!, out.failed!]) for (const k of Object.keys(m)) if (!keepCode(k)) delete m[k as Extra];
   }
