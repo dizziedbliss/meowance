@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { type CourseNeed, paperMarks, planTarget } from "../lib/cgpa";
+import { CIE_MAX, type CourseNeed, paperMarks, planTarget, SEE_MAX } from "../lib/cgpa";
 import type { Attendance } from "../lib/types";
 
 const tone = { open: "text-ink", stretch: "text-fine", capped: "text-fine" } as const;
@@ -79,13 +79,13 @@ export function Target({ data, loading }: { data: Attendance; loading: boolean }
                   <span>
                     <span className="block font-semibold leading-snug">{c.name}</span>
                     <span className="font-mono text-xs text-mut">
-                      {c.code.toLowerCase()} · {c.credits} credits · cie {c.cie}/50
+                      {c.code.toLowerCase()} · {c.credits} credits · cie {c.cie}/{CIE_MAX}
                     </span>
                   </span>
 <span className="md:text-right">
                     <span className={`block font-mono text-sm ${tone[c.status]}`}>
                       {c.status === "stretch"
-                        ? `${c.band.grade} · ${c.seeNeeded - 50} more cie + a perfect see`
+                        ? `${c.band.grade} · ${c.seeNeeded - SEE_MAX} more cie + a perfect see`
                         : c.status === "capped"
                           ? `${c.band.grade} is its best · see ${seeRange(c)}/100`
                           : `${c.band.grade} · see ${seeRange(c)}/100`}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { posts } from "../data/board";
 import { ApiError, dobOk, errorCopy, fetchAttendance, usnOk } from "../lib/api";
 import { portalAsleep } from "../lib/dates";
-import { merge, type Stored } from "../lib/cache";
+import { type Extra, merge, type Stored } from "../lib/cache";
 import { saveCreds, saveData } from "../lib/vault";
 import { Logo } from "./Logo";
 
@@ -29,11 +29,12 @@ export function Login({ onIn }: { onIn: (s: Stored) => void }) {
     setErr(null);
     setBusy(true);
     try {
-      // every course's class-by-class page comes along with the login, so the dated
-      // boxes are there at once (no second login right after); other tabs fetch when opened
-      const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim(), ["history:all"]);
+      // everything the home screen needs comes along with the login (every course's
+      // class-by-class page + the calendar), so there's no second login right after;
+      // other tabs fetch when opened
+      const a = await fetchAttendance(usn.trim().toUpperCase(), dob.trim(), ["history:all", "calendar"]);
       await saveCreds({ usn: usn.trim().toUpperCase(), dob: dob.trim() });
-      const got = Object.keys(a.history ?? {}).map((code) => `history:${code}` as const);
+      const got: Extra[] = [...Object.keys(a.history ?? {}).map((code) => `history:${code}` as const), "calendar"];
       const s = merge(null, a, got, Date.now());
       saveData(s);
       onIn(s);

@@ -43,8 +43,15 @@ export function cappedTotal(c: Course, planned: number | null, cal: Calendar | n
   return Math.min(planned ?? Infinity, whole, pace);
 }
 
-/** Classes still to be held this sem (capped total minus held); null when we can't tell. Never negative. */
+/**
+ * Classes still to be held this sem, for "out of reach": the portal's planned
+ * total minus held, and 0 once the last working day is past. No credit cap here:
+ * a course can meet more often than its credits, and undercounting would tell
+ * someone it's hopeless when it isn't. Null without the history (then we don't say).
+ */
 export function classesLeft(c: Course, h: CourseHistory | null | undefined, cal: Calendar | null | undefined, today: string): number | null {
-  const total = cappedTotal(c, semTotal(h), cal, today);
-  return total == null ? null : Math.max(0, total - c.conducted);
+  const planned = semTotal(h);
+  if (planned == null) return null;
+  if (cal && today > lastWorkingDay(cal)) return 0;
+  return Math.max(0, planned - c.conducted);
 }

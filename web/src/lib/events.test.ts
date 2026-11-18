@@ -46,6 +46,8 @@ describe("events", () => {
   it("date helpers", () => {
     expect(isoDayMonth("2026-08-03")).toBe("3 aug");
     expect(daysBetween("2026-11-09", "2026-11-20")).toBe(11);
-    expect(todayISO(new Date(2026, 10, 8))).toBe("2026-11-08");
+    expect(todayISO(new Date("2026-11-08T12:00:00+05:30"))).toBe("2026-11-08");
+    expect(todayISO(new Date("2026-11-08T23:59:00+05:30"))).toBe("2026-11-08"); // late night in india
+    expect(todayISO(new Date("2026-11-08T19:00:00Z"))).toBe("2026-11-09"); // 12:30am ist
   });
 });

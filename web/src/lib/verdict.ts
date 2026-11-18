@@ -16,9 +16,14 @@ export type Verdict = {
   cooked?: boolean; // the target can't be hit with the classes left: headline is a roast, sub is the small why
 };
 
-export function zoneOf(percent: number): Zone {
-  if (percent >= 85) return "safe";
-  if (percent >= 75) return "fine";
+/**
+ * MCE's lines: 85+ safe, 75–85 fine zone, under 75 dead. Read from the server's
+ * exact need counts (pkg/attend), not the one-decimal percent, so a rounded
+ * "85.0%" that is really 84.96 still says fine zone, matching its "attend 1 more".
+ */
+export function zoneOf(c: Pick<Course, "need75" | "need85">): Zone {
+  if (c.need85 === 0) return "safe";
+  if (c.need75 === 0) return "fine";
   return "dead";
 }
 
@@ -51,7 +56,7 @@ export function verdict(c: Course, left: number | null = null): Verdict {
   if (c.conducted === 0) {
     return { zone: "safe", head: { before: "nothing yet", n: null, after: "" }, sub: "no classes conducted. enjoy it while it lasts." };
   }
-  const zone = zoneOf(c.percent);
+  const zone = zoneOf(c);
 
   if (zone === "safe") {
     const s = c.skip85;
@@ -104,8 +109,10 @@ export function verdict(c: Course, left: number | null = null): Verdict {
 }
 
 /** Worst first. */
+/** Worst first; a course with no classes held yet goes last (its 0% isn't a problem child). */
 export function byPercent(courses: Course[]): Course[] {
-  return [...courses].sort((a, b) => a.percent - b.percent);
+  const held = (c: Course) => (c.conducted > 0 ? 0 : 1);
+  return [...courses].sort((a, b) => held(a) - held(b) || a.percent - b.percent);
 }
 
 /**

@@ -28,7 +28,9 @@ function idb<T>(fn: (store: IDBObjectStore) => IDBRequest<T>, mode: IDBTransacti
       const req = fn(tx.objectStore(STORE));
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);
-      tx.oncomplete = () => open.result.close();
+      // close on every ending: a failed request aborts the transaction and never completes,
+      // and an open connection blocks logout's deleteDatabase
+      tx.oncomplete = tx.onabort = tx.onerror = () => open.result.close();
     };
   });
 }

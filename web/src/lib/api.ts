@@ -1,4 +1,3 @@
-import type { Extra } from "./cache";
 import type { ApiErrorCode, Attendance } from "./types";
 
 export class ApiError extends Error {
@@ -16,11 +15,15 @@ export const errorCopy: Record<ApiErrorCode, string> = {
   portal_changed: "the portal changed its look and we can't read it rn. we're on it.",
   internal: "something broke on our side. try again.",
   network: "you're offline, or we are. try again.",
-  portal_blocked: "Oops, they're blocking us, please wait until we fix ts"
+  portal_blocked: "oops, they're blocking us, please wait until we fix ts",
 };
 
-/** Logs in and returns the dashboard, plus the extras asked for (left out of the reply otherwise). */
-export async function fetchAttendance(usn: string, dob: string, extras: Extra[] = []): Promise<Attendance> {
+/**
+ * Logs in and returns the dashboard, plus the extras asked for (left out of the
+ * reply otherwise). extras are as sent: cache.ts `wire` adds the counts a cached
+ * history page reflects.
+ */
+export async function fetchAttendance(usn: string, dob: string, extras: string[] = []): Promise<Attendance> {
   let res: Response;
   try {
     res = await fetch("/api/attendance", {

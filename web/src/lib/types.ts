@@ -51,8 +51,6 @@ export type CourseHistory = {
   stillToGo: number;
   classes: ClassRecord[]; // oldest first
 };
-export type CIEStat = { name: string; obtained: number; classAvg: number; max: number };
-export type CIEDetails = { code: string; stats: CIEStat[] };
 export type ExamCourse = {
   code: string;
   name: string;
@@ -79,7 +77,6 @@ export type Attendance = {
   timetable?: Day[] | null;
   calendar?: Calendar | null;
   history?: Record<string, CourseHistory | null>;
-  cieDetails?: Record<string, CIEDetails | null>;
   exams?: ExamHistory | null;
 };
 

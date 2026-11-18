@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { merge, needs, revive, stale, type Stored } from "./cache";
+import { merge, needs, revive, stale, type Stored, wire } from "./cache";
 import type { Attendance, Calendar, Day } from "./types";
 
 const day = (date: string): Day => ({ weekday: "Monday", date, classes: [] });
@@ -21,9 +21,18 @@ describe("needs", () => {
     expect(needs(stored({ a: att({ calendar: null }), got: {} }), "calendar", FRI)).toBe(true);
   });
   it("keeps the timetable for the rest of its week (mon–sun)", () => {
-    const s = stored({ a: att({ timetable: [day("09-11-2026")] }), got: { timetable: at(2026, 11, 9, 8) } }); // monday
+    const s = stored({ a: att({ timetable: [day("09-11-2026")] }), got: { timetable: at(2026, 11, 9, 8) }, basis: { timetable: "7|A" } }); // monday
     expect(needs(s, "timetable", at(2026, 11, 15, 23))).toBe(false); // sunday night, same week
     expect(needs(s, "timetable", at(2026, 11, 16, 0))).toBe(true); // next monday
+  });
+  it("refetches the timetable mid-week when the sem or section changes", () => {
+    const s = stored({ a: att({ timetable: [day("09-11-2026")] }), got: { timetable: at(2026, 11, 9, 8) }, basis: { timetable: "6|A" } });
+    expect(needs(s, "timetable", at(2026, 11, 10))).toBe(true);
+  });
+  it("waits 10 minutes before auto-fetching a page that just failed", () => {
+    const s = stored({ a: att({ calendar: null }), failed: { calendar: FRI } });
+    expect(needs(s, "calendar", FRI + 9 * 60_000)).toBe(false);
+    expect(needs(s, "calendar", FRI + 10 * 60_000)).toBe(true);
   });
   it("keeps the calendar for 7 days", () => {
     const s = stored({ a: att({ calendar: cal }), got: { calendar: FRI }, basis: { calendar: "7" } });
@@ -54,6 +63,8 @@ describe("merge", () => {
     expect(next.got.timetable).toBe(FRI);
     expect(next.a.calendar).toBe(cal); // a failed refresh keeps the old copy on screen…
     expect(next.got.calendar).toBe(2); // …and its age, so it's retried next time
+    expect(next.failed).toEqual({ calendar: FRI });
+    expect(merge(next, att({ calendar: cal }), ["calendar"], FRI + 1).failed).toEqual({}); // a success clears it
   });
   it("never mixes two students", () => {
     const prev = stored({ a: att({ calendar: cal }), got: { calendar: 2 } });
@@ -94,19 +105,31 @@ describe("per-course and exam pages", () => {
     expect(counted.a.history?.["23AI701"]).toBeTruthy(); // still shown…
     expect(needs(counted, "history:23AI701", FRI)).toBe(true); // …but refetched: a class was taken
   });
-  it("refetches a course's cie averages when its marks change", () => {
-    let s = merge(null, base, [], FRI);
-    s = merge(s, { ...base, cieDetails: { "23AI701": { code: "23AI701", stats: [] } } }, ["cie:23AI701"], FRI);
-    expect(needs(s, "cie:23AI701", FRI)).toBe(false);
-    const marked = merge(s, att({ courses: [course("23AI701", 20, 25, 18), course("23AI702", 10, 12)] }), [], FRI);
-    expect(needs(marked, "cie:23AI701", FRI)).toBe(true);
+  it("sends cached courses with their counts, so the server can skip unchanged ones", () => {
+    const s = merge(null, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
+    expect(wire(s, ["history:23AI701", "history:23AI702", "calendar"])).toEqual(["history:23AI701@20/25", "history:23AI702", "calendar"]);
+    expect(wire(null, ["history:23AI701"])).toEqual(["history:23AI701"]);
+  });
+  it("keeps a course the server skipped as unchanged, without marking it failed", () => {
+    let s = merge(null, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
+    s = merge(s, { ...base, history: {} }, ["history:23AI701"], FRI + 1);
+    expect(s.a.history?.["23AI701"]).toBeTruthy();
+    expect(s.failed).toEqual({});
+    expect(needs(s, "history:23AI701", FRI + 1)).toBe(false);
+  });
+  it("drops last sem's courses from the cache", () => {
+    let s = merge(null, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
+    s = merge(s, att({ courses: [course("24AI801", 0, 0)] }), [], FRI);
+    expect(s.a.history).toEqual({});
+    expect(s.got).toEqual({});
+    expect(s.basis).toEqual({});
   });
   it("keeps one course's page when another's comes back, and a failed one stays stale", () => {
     let s = merge(null, { ...base, history: { "23AI701": hist("23AI701") } }, ["history:23AI701"], FRI);
     s = merge(s, { ...base, history: { "23AI702": null } }, ["history:23AI702"], FRI);
     expect(s.a.history?.["23AI701"]).toBeTruthy();
     expect(s.a.history?.["23AI702"]).toBeNull();
-    expect(needs(s, "history:23AI702", FRI)).toBe(true);
+    expect(needs(s, "history:23AI702", FRI + 10 * 60_000)).toBe(true);
   });
   it("keeps exam history for 30 days, or until the semester changes", () => {
     const s = merge(null, { ...base, exams }, ["exams"], FRI);

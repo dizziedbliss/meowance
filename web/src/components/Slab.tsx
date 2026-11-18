@@ -1,15 +1,24 @@
 import { useEffect, useState } from "react";
-import type { ClassRecord, Course } from "../lib/types";
 import { fmtPct, predicted, verdict, zoneName } from "../lib/verdict";
 import { Headline } from "./Headline";
-import { toggleProps } from "./CourseRow";
+import { type CourseProps, toggleProps } from "./CourseRow";
 import { Tally } from "./Tally";
 
 const bg = { dead: "bg-dead", fine: "bg-fine", safe: "bg-safe" } as const;
 
-/** Count up to the number once, unless the viewer prefers reduced motion. */
+const reduceMotion = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/**
+ * The percent, counting up once unless the viewer prefers reduced motion. Its
+ * own component, so each animation frame re-renders this number, not the whole
+ * slab and its tally.
+ */
+function CountUp({ target }: { target: number }) {
+  return <>{fmtPct(useCountUp(target))}</>;
+}
+
 function useCountUp(target: number): number {
-  const reduce = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const reduce = reduceMotion;
   const [v, setV] = useState(reduce ? target : 0);
   useEffect(() => {
     if (reduce) return setV(target);
@@ -27,12 +36,9 @@ function useCountUp(target: number): number {
 }
 
 /** Your worst subject, as a slab in its zone's color. */
-type SlabProps = { course: Course; classes: ClassRecord[] | null; total: number | null; left: number | null; open: boolean; onToggle: () => void };
-
-export function Slab({ course, classes, total, left, open, onToggle }: SlabProps) {
+export function Slab({ course, classes, total, left, open, onToggle }: CourseProps) {
   const v = verdict(course, left);
   const guess = total && !v.cooked ? predicted(course, total) : null; // an extra, never the main verdict
-  const shown = useCountUp(course.percent);
 
   return (
     <section
@@ -46,7 +52,7 @@ export function Slab({ course, classes, total, left, open, onToggle }: SlabProps
 
       <div>
         <div className="numeral -ml-[.04em] mt-2.5 text-[clamp(140px,24vw,300px)] leading-[.78] tracking-[-.025em]">
-          {fmtPct(shown)}
+          <CountUp target={course.percent} />
           <small className="ml-1.5 text-[.24em] font-bold tracking-normal opacity-60">%</small>
         </div>
         <div className="mt-4 font-display text-[clamp(20px,2.3vw,27px)] font-bold leading-[1.12] tracking-[-.01em]">

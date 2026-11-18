@@ -36,10 +36,10 @@ describe("scoreVerdict", () => {
 describe("timetable helpers", () => {
   const cls = (code: string): Class => ({ start: "09:30", end: "10:30", code, name: "AI FOR PREDICTIVE ANALYTICS AND IOT", room: "LABORATARY", batch: "BATCH 1" });
   const courses = [
-    course({ code: "DEAD", percent: 71.4 }),
+    course({ code: "DEAD", percent: 71.4, need75: 2, need85: 13 }),
     course({ code: "FINE", percent: 80 }),
-    course({ code: "SAFE", percent: 100, skip85: 2 }),
-    course({ code: "ZERO", percent: 100, skip85: 0 }),
+    course({ code: "SAFE", percent: 100, need85: 0, skip85: 2 }),
+    course({ code: "ZERO", percent: 100, need85: 0, skip85: 0 }),
   ];
   it("tags each class by that subject's attendance", () => {
     expect(classTag(cls("DEAD"), courses)?.tone).toBe("dead");
@@ -75,6 +75,6 @@ describe("portal sleep hours (IST)", () => {
 describe("classTag with classes left", () => {
   it("adds how many classes are left", () => {
     const cls = (code: string): Class => ({ start: "09:30", end: "10:30", code, name: "X", room: "R", batch: "" });
-    expect(classTag(cls("SAFE"), [course({ code: "SAFE", percent: 100, skip85: 2 })], 12)?.text).toBe("bunkable · 2 lives · 12 left");
+    expect(classTag(cls("SAFE"), [course({ code: "SAFE", percent: 100, need85: 0, skip85: 2 })], 12)?.text).toBe("bunkable · 2 lives · 12 left");
   });
 });
