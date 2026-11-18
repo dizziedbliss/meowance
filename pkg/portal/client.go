@@ -301,11 +301,21 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 			c.logf("calendar: cached")
 		} else {
 			fetchPage("calendar", fmt.Sprintf(calendarPath, year), func(p string) {
-				// every semester has its own calendar; the page lists them all
-				if id := CalendarYearFor(p, d.Branch, d.Sem); id != "" && id != year {
-					if q, ok := c.extra(ctx, hc, "calendar", fmt.Sprintf(calendarPath, id), dashURL); ok {
-						p = q
+				// every semester has its own calendar; the page lists them all. Only
+				// the student's own is used (and cached for the rest of the sem): a
+				// sem not listed, or a failed second fetch, gives no calendar (the
+				// browser retries later) rather than another sem's dates.
+				id := CalendarYearFor(p, d.Branch, d.Sem)
+				switch {
+				case id == "":
+					c.logf("calendar: no COE listed for %s sem %s", programme(d.Branch), d.Sem)
+					return
+				case id != year:
+					q, ok := c.extra(ctx, hc, "calendar", fmt.Sprintf(calendarPath, id), dashURL)
+					if !ok {
+						return
 					}
+					p = q
 				}
 				snap.Calendar = ParseCalendar(p)
 				c.calendars.put(key, snap.Calendar, time.Now())

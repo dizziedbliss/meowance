@@ -467,3 +467,43 @@ func TestCalendarCachedPerSemester(t *testing.T) {
 		t.Errorf("an expired calendar should be fetched again (hits %d, want 2)", n)
 	}
 }
+
+// Never another sem's calendar: if the student's own COE page fails, or their
+// sem isn't listed, there's no calendar, and nothing is cached for that sem.
+func TestCalendarNeverFallsBackToAnotherSem(t *testing.T) {
+	for _, c := range []struct{ name, sem string }{{"own page fails", "SEM 03"}, {"sem not listed", "SEM 04"}} {
+		t.Run(c.name, func(t *testing.T) {
+			srv, _ := fakePortal(t, loginFixture(t))
+			inner := srv.Config.Handler
+			srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				q := r.URL.Query()
+				if r.Method == http.MethodGet && q.Get("task") == "calenderdisplay" && q.Get("yearId") == "3" {
+					w.WriteHeader(http.StatusBadGateway) // the sem-3 page is down
+					return
+				}
+				if r.Method == http.MethodGet && (q.Get("task") == "" || q.Get("task") == "dashboard") {
+					rec := httptest.NewRecorder()
+					inner.ServeHTTP(rec, r)
+					for k, v := range rec.Header() {
+						w.Header()[k] = v
+					}
+					w.WriteHeader(rec.Code)
+					w.Write([]byte(strings.ReplaceAll(rec.Body.String(), "SEM 07", c.sem)))
+					return
+				}
+				inner.ServeHTTP(w, r)
+			})
+			cl := newTestClient(srv.URL)
+			s, err := cl.Fetch(context.Background(), testUSN, testDOB, Extras{Calendar: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if s.Calendar != nil {
+				t.Error("got a calendar that isn't this sem's")
+			}
+			if len(cl.calendars.m) != 0 {
+				t.Errorf("cached %v", cl.calendars.m)
+			}
+		})
+	}
+}

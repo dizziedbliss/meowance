@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { dayMonth, mondayOf, todayISO, todayName } from "../lib/dates";
 import type { Attendance } from "../lib/types";
-import { classesLeft } from "../lib/history";
+import { cappedTotal, semTotal } from "../lib/history";
 import { classTag, courseName, room, trimTime } from "../lib/week";
 import { SubTabs } from "./SubTabs";
 
@@ -79,7 +79,9 @@ export function Timetable({ data, loading }: { data: Attendance; loading: boolea
                 <ul>
                   {d.classes.map((c, i) => {
                     const course = data.courses.find((x) => x.code === c.code);
-                    const left = course ? classesLeft(course, data.history?.[c.code], data.calendar, now) : null;
+                    // a guess shown as a count, so the conservative one (capped by credits), never the portal's padded "still to go"
+                    const capped = course ? cappedTotal(course, semTotal(data.history?.[c.code]), data.calendar, now) : null;
+                    const left = course && capped != null ? Math.max(0, capped - course.conducted) : null;
                     const tag = classTag(c, data.courses, left);
                     return (
                       <li

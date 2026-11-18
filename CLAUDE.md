@@ -91,7 +91,7 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   working days left, upcoming/past split, event tags; `lib/dates.ts` the portal's date formats and
   "today" in IST; `lib/history.ts` `classesLeft` (the portal's planned total minus held, 0 after the last
   working day: what "out of reach" uses) and `cappedTotal` (that total capped by credits x weeks: only for
-  the predicted-bunks line); `lib/cache.ts` which extras are stale (the timetable after the week, sem or
+  the predicted-bunks line and the timetable's "· N left" tag, the conservative guesses); `lib/cache.ts` which extras are stale (the timetable after the week, sem or
   section changes, the calendar after 7 days or a sem change, a course's class list when its counts change;
   a failed page waits 10 min before it's auto-fetched again) and merges replies into the cache, dropping
   last sem's courses; `wire` adds the `@counts` hints. Login fetches the dashboard + every class list +
@@ -179,4 +179,8 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   self-hosting the Google Fonts (one render-blocking stylesheet + 2 extra origins on a cold load).
 - The predicted-bunks line can disagree with the main verdict (slab: "attend 3 more" above
   "predicted: even 75's out of reach"), since only the line uses the credit cap.
+- A course with no attendance link has no class list, so its history counts as failed and the home
+  screen retries it (a full portal login) every 10 min. Rare on real dashboards.
+- The calendar is only shown when it's the student's own COE: a sem missing from the portal's COE list,
+  or a failed fetch of it, gives no calendar (never another sem's, which would skew classes left).
 - Hashed `/assets/*` are cached a year (`immutable`); `/brand/*` a day. The HTML stays revalidated.
