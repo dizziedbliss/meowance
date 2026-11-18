@@ -272,8 +272,14 @@ func (c *Client) fetchOnce(ctx context.Context, usn string, dob time.Time, want 
 			c.logf("timetable: %d bytes, %d days", len(p), len(snap.Timetable))
 		})
 	}
-	if want.Calendar {
-		fetchPage("calendar", CalendarPath, func(p string) {
+	if year := EventsYear(body); want.Calendar && year != "" {
+		fetchPage("calendar", fmt.Sprintf(calendarPath, year), func(p string) {
+			// every semester has its own calendar; the page lists them all
+			if id := CalendarYearFor(p, d.Sem); id != "" && id != year {
+				if q, ok := c.extra(ctx, hc, "calendar", fmt.Sprintf(calendarPath, id), dashURL); ok {
+					p = q
+				}
+			}
 			snap.Calendar = ParseCalendar(p)
 			c.logf("calendar: %d bytes, parsed %t", len(p), snap.Calendar != nil)
 		})

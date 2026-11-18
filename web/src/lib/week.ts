@@ -4,7 +4,13 @@ import { zoneOf } from "./verdict";
 export type ClassTag = { text: string; tone: "dead" | "fine" | "safe" | "mut" };
 
 /** Can you skip this class? Decided by that subject's attendance right now. */
-export function classTag(c: Class, courses: Course[]): ClassTag | null {
+export function classTag(c: Class, courses: Course[], left: number | null = null): ClassTag | null {
+  const tag = baseTag(c, courses);
+  if (!tag || left === null) return tag;
+  return { ...tag, text: `${tag.text} · ${left} left` };
+}
+
+function baseTag(c: Class, courses: Course[]): ClassTag | null {
   const course = courses.find((x) => x.code === c.code);
   if (!course || course.conducted === 0) return null;
   switch (zoneOf(course.percent)) {

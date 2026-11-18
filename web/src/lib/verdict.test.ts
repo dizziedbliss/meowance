@@ -71,3 +71,31 @@ describe("predicted (the small extra line; the main verdict stays 'attend N')", 
     expect(predicted(c(10, 25), 45)).toEqual({ n: 0, line: "predicted: even 75's out of reach this sem" });
   });
 });
+
+describe("out of reach (classes left)", () => {
+  const dead = { code: "X", name: "X", credits: 3, attended: 9, conducted: 26, percent: 34.6, need75: 42, need85: 88, skip85: 0 } as Course;
+  it("roasts when 75 needs more than are left, with the why below", () => {
+    const v = verdict(dead, 3);
+    expect(v.cooked).toBe(true);
+    expect(v.head.n).toBeNull();
+    expect(v.head.before).toMatch(/cooked|burnt/);
+    expect(v.sub).toContain("need 42");
+    expect(v.sub).toContain("only 3 classes left");
+    expect(v.then).toBeUndefined();
+    expect(verdict(dead, 3).head.before).toBe(v.head.before); // stable per course
+  });
+  it("keeps the numbers when they're reachable or unknown", () => {
+    expect(verdict(dead, 100).head.n).toBe(42);
+    expect(verdict(dead, 100).then?.head.n).toBe(88);
+    expect(verdict(dead).head.n).toBe(42);
+  });
+  it("75 reachable but 85 not", () => {
+    const v = verdict(dead, 50);
+    expect(v.head.n).toBe(42);
+    expect(v.then?.head.before).toBe("85's out of reach");
+  });
+  it("fine zone out of reach", () => {
+    const fine = { ...dead, percent: 80, need75: 0, need85: 12 } as Course;
+    expect(verdict(fine, 5).cooked).toBe(true);
+  });
+});

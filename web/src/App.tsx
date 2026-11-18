@@ -21,11 +21,11 @@ const titleCase = (s: string) => s.toLowerCase().replace(/\b\p{L}/gu, (c) => c.t
 function extrasFor(data: Attendance | null, tab: Tab | null, scores: ScoresView): Extra[] {
   if (!data) return [];
   const each = (kind: "history") => data.courses.map((c) => `${kind}:${c.code}` as Extra);
-  if (tab === "timetable") return ["timetable"];
+  if (tab === "timetable") return ["timetable", "calendar"]; // the calendar is what the tags' classes-left count needs
   if (tab === "events") return ["calendar"];
   if (tab === "notes") return []; // notes load from their own endpoint, not the portal
   if (tab === "scores") return scores === "now" ? [] : ["exams"];
-  return each("history"); // dated tally boxes; cached until a course's counts change
+  return [...each("history"), "calendar"]; // dated tally boxes (cached until a course's counts change) + the dates the classes-left math needs
 }
 
 export default function App() {

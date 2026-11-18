@@ -71,3 +71,10 @@ describe("portal sleep hours (IST)", () => {
     expect(portalAsleep(at("2026-11-13T00:30:00Z"))).toBe(false); // 6:00am
   });
 });
+
+describe("classTag with classes left", () => {
+  it("adds how many classes are left", () => {
+    const cls = (code: string): Class => ({ start: "09:30", end: "10:30", code, name: "X", room: "R", batch: "" });
+    expect(classTag(cls("SAFE"), [course({ code: "SAFE", percent: 100, skip85: 2 })], 12)?.text).toBe("bunkable · 2 lives · 12 left");
+  });
+});

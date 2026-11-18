@@ -7,8 +7,20 @@ import (
 	"time"
 )
 
-// CalendarPath is the portal's calendar of events, relative to the login page URL.
-const CalendarPath = "?option=com_bvbsims&controller=academiccal&task=calenderdisplay&yearId=2"
+// calendarPath is the calendar page of one COE (yearId), relative to the login page URL.
+// No id is built in: the dashboard's own Events link gives the first, and the
+// page's list of COEs gives the one for the student's semester.
+const calendarPath = "?option=com_bvbsims&controller=academiccal&task=calenderdisplay&yearId=%s"
+
+var reEventsLink = regexp.MustCompile(`href="index\.php\?[^"]*task=calenderdisplay&yearId=([0-9]+)"`)
+
+// EventsYear is the calendar id behind the "Events" link in the logged-in page's menu; "" if there is none.
+func EventsYear(html string) string {
+	if m := reEventsLink.FindStringSubmatch(html); m != nil {
+		return m[1]
+	}
+	return ""
+}
 
 // Event kinds, taken from how the portal colours the calendar.
 const (
@@ -44,6 +56,23 @@ var (
 	reEventText = regexp.MustCompile(`^([A-Za-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?` +
 		`(?:\s+to\s+([A-Za-z]{3})[a-z]*\s+(\d{1,2})(?:st|nd|rd|th)?)?\s*-\s*(.+)$`)
 )
+
+var reCOELink = regexp.MustCompile(`(?i)yearId=([0-9]+)'>\s*COE[^<]*?\bUG\s+([0-9]+)(?:st|nd|rd|th)\s+SEM`)
+
+// CalendarYearFor finds, in a calendar page's list of COEs, the id of the UG
+// calendar for this semester ("07" or "7"); "" when the list has none.
+func CalendarYearFor(html, sem string) string {
+	want, err := strconv.Atoi(strings.TrimSpace(sem))
+	if err != nil {
+		return ""
+	}
+	for _, m := range reCOELink.FindAllStringSubmatch(html, -1) {
+		if n, _ := strconv.Atoi(m[2]); n == want {
+			return m[1]
+		}
+	}
+	return ""
+}
 
 // ParseCalendar reads the calendar-of-events page. It returns nil if the page
 // has no semester dates (not the calendar page, or the layout changed).

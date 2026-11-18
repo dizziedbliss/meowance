@@ -30,7 +30,9 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   nil on failure). `Client.Logf` logs
   one line per extra page (status/size/parsed), never credentials or URLs. `dashboard.go` parses the
   dashboard, including each course's CIE parts and total; `timetable.go` the week (the faculty column
-  is never parsed); `calendar.go` the semester dates, holidays, exam days and events. `proxy.go`: with
+  is never parsed); `calendar.go` the semester dates, holidays, exam days and events
+  (every sem has its own COE page, `yearId`: the dashboard's Events link opens one, and that page's
+  COE list gives the student's sem; no id is hardcoded). `proxy.go`: with
   `OXYLABS_USERNAME`/`OXYLABS_PASSWORD` set, requests go through a sticky residential proxy session
   (the portal blocks datacenter IPs). Each login attempt is pinned to one session ID via its
   context; a 403 retires only that ID and retries. The handler gives a login 50s in all

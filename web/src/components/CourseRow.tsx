@@ -20,11 +20,11 @@ export const toggleProps = (open: boolean, onToggle: () => void, label: string) 
   },
 });
 
-type RowProps = { course: Course; classes: ClassRecord[] | null; total: number | null; open: boolean; onToggle: () => void };
+type RowProps = { course: Course; classes: ClassRecord[] | null; total: number | null; left: number | null; open: boolean; onToggle: () => void };
 
-export function CourseRow({ course, classes, total, open, onToggle }: RowProps) {
-  const v = verdict(course);
-  const guess = total ? predicted(course, total) : null; // an extra, never the main verdict
+export function CourseRow({ course, classes, total, left, open, onToggle }: RowProps) {
+  const v = verdict(course, left);
+  const guess = total && !v.cooked ? predicted(course, total) : null; // an extra, never the main verdict
   return (
     <div
       {...toggleProps(open, onToggle, `${course.name}: ${open ? "hide" : "show"} every class`)}
@@ -48,7 +48,7 @@ export function CourseRow({ course, classes, total, open, onToggle }: RowProps) 
         </b>
         <span className="mt-1 block text-sm text-ink-2">{v.sub}</span>
       </div>
-      <Tally course={course} zone={v.zone} classes={classes} className="col-span-full text-ink" />
+      <Tally course={course} zone={v.zone} classes={classes} left={left} className="col-span-full text-ink" />
       {guess && <p className="col-span-full -mt-1.5 font-mono text-[11px] text-mut">{guess.line}*</p>}
     </div>
   );
