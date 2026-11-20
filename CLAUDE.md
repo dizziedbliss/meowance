@@ -138,8 +138,8 @@ Full plan & confirmed portal facts: `~/.claude/plans/meowance-attendance-portal.
   25-26 and 26-27 intakes' scheme changed and is unknown.
 - Every course is assumed to be 3 cies + 2 activities, but lab courses have only activities and each
   course type has its own structure (Max, 2026-11-20; not mapped yet). A lab's activities may be
-  counted as cies, and "to sit the see" is wrong for it. The see is only in exam history: a dashboard
-  test named like it is a cie (`nameActivities`).
+  counted as cies, and "to sit the see" is wrong for it. The see is only in exam history: the dashboard
+  prints cie3 as `SEM`, and a test named SEM/SEE is read as the next cie (`nameActivities`).
 - The CGPA target assumes every course's CIE is out of 50 (the portal's `cieMax` is only "usually" 50)
   and whole-or-half-mark totals; unconfirmed with real data. It has only been run on fixtures.
 - The portal 403s Vercel's Mumbai IPs directly (seen 2026-11-13 on a preview without the proxy);
