@@ -144,17 +144,30 @@ func TestNameActivities(t *testing.T) {
 }
 
 // The SEE is only ever in exam history, so a dashboard test named like the see
-// is the next cie (cie3 showed up as "see" on 2026-11-20).
+// is a cie. The portal prints cie3 as "SEM" (seen 2026-11-20).
 func TestNameActivitiesSEEIsCIE(t *testing.T) {
-	for _, see := range []string{"SEE", "SEE3", "see 3", "SEE1"} {
-		parts := []CIEPart{{Name: "SE1"}, {Name: "SE1"}, {Name: "SE2"}, {Name: "SE2"}, {Name: see}}
+	cases := []struct {
+		in, want []string
+	}{
+		{[]string{"SE1", "SE1", "SE2", "SE2", "SEM"}, []string{"SE1", "A1", "SE2", "A2", "SE3"}},
+		{[]string{"SE1", "SE2", "SEM"}, []string{"SE1", "SE2", "SE3"}},
+		{[]string{"SE2", "SEM"}, []string{"SE2", "SE3"}}, // no cie1 row: still cie3, not a second cie2
+		{[]string{"SE1", "SE2", "SEE"}, []string{"SE1", "SE2", "SE3"}},
+		{[]string{"SE1", "SE2", "sem 3"}, []string{"SE1", "SE2", "SE3"}},
+		{[]string{"SE1", "SE2", "SEE3"}, []string{"SE1", "SE2", "SE3"}},
+	}
+	for _, tc := range cases {
+		parts := make([]CIEPart, len(tc.in))
+		for i, n := range tc.in {
+			parts[i].Name = n
+		}
 		nameActivities(parts)
 		var got []string
 		for _, p := range parts {
 			got = append(got, p.Name)
 		}
-		if want := []string{"SE1", "A1", "SE2", "A2", "SE3"}; !reflect.DeepEqual(got, want) {
-			t.Errorf("%q: names = %v, want %v", see, got, want)
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%v: names = %v, want %v", tc.in, got, tc.want)
 		}
 	}
 }

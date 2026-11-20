@@ -69,7 +69,8 @@ var (
 	rePresentPair = regexp.MustCompile(`<span[^>]*>([0-9]+)</span>\s*/\s*<span[^>]*>([0-9]+)</span>`)
 	reCIEPart     = regexp.MustCompile(`(?s)<td>\s*([^<]{1,20}?)\s*</td>\s*<td[^>]*>\s*Marks Entered on\s*([^<]*?)\s*</td>` +
 		`.*?Max Marks</td>\s*<td[^>]*>\s*([0-9.]+)\s*</td>\s*<td[^>]*>\s*Obtained Marks</td>\s*<td[^>]*>\s*([^<]*?)\s*</td>`)
-	reSEEName  = regexp.MustCompile(`(?i)^see\s*[0-9]*$`)
+	reSEEName  = regexp.MustCompile(`(?i)^se[em]\s*[0-9]*$`)
+	reSENum    = regexp.MustCompile(`(?i)^se\s*([0-9]+)$`)
 	reCIETotal = regexp.MustCompile(`(?s)Total Marks</td>\s*<td[^>]*>\s*([0-9.]+)\s*</td>`)
 )
 
@@ -139,20 +140,23 @@ type detail struct {
 // becomes "A<n>". A name that appears once is left alone.
 //
 // The see is only ever in exam history, never on the dashboard, so a test
-// named like it (cie3 showed up as one) is the next cie, whatever its number.
+// named like it is a cie: the portal prints cie3 as "SEM". It becomes the cie
+// after the highest one seen so far (SE2, SEM is cie2, cie3), never a repeat.
 func nameActivities(parts []CIEPart) {
 	seen := map[string]bool{}
-	cies := 0
+	top := 0 // highest cie number so far
 	for i, p := range parts {
 		if reSEEName.MatchString(p.Name) {
-			cies++
-			parts[i].Name = "SE" + strconv.Itoa(cies)
+			top++
+			parts[i].Name = "SE" + strconv.Itoa(top)
 			seen[parts[i].Name] = true
 			continue
 		}
 		if !seen[p.Name] {
-			cies++
 			seen[p.Name] = true
+			if m := reSENum.FindStringSubmatch(p.Name); m != nil {
+				top = max(top, int(num(m[1])))
+			}
 			continue
 		}
 		if n := strings.TrimLeft(p.Name, "SEsecieCIE \t"); n != "" {
