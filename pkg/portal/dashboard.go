@@ -69,6 +69,7 @@ var (
 	rePresentPair = regexp.MustCompile(`<span[^>]*>([0-9]+)</span>\s*/\s*<span[^>]*>([0-9]+)</span>`)
 	reCIEPart     = regexp.MustCompile(`(?s)<td>\s*([^<]{1,20}?)\s*</td>\s*<td[^>]*>\s*Marks Entered on\s*([^<]*?)\s*</td>` +
 		`.*?Max Marks</td>\s*<td[^>]*>\s*([0-9.]+)\s*</td>\s*<td[^>]*>\s*Obtained Marks</td>\s*<td[^>]*>\s*([^<]*?)\s*</td>`)
+	reSEEName  = regexp.MustCompile(`(?i)^see\s*[0-9]*$`)
 	reCIETotal = regexp.MustCompile(`(?s)Total Marks</td>\s*<td[^>]*>\s*([0-9.]+)\s*</td>`)
 )
 
@@ -136,10 +137,21 @@ type detail struct {
 // under the same name (SE1, SE1, SE2, SE2). The first SEn is cie n and the next
 // is activity n (checked against the CIE page: CIE1, A1, CIE2, A2), so a repeat
 // becomes "A<n>". A name that appears once is left alone.
+//
+// The see is only ever in exam history, never on the dashboard, so a test
+// named like it (cie3 showed up as one) is the next cie, whatever its number.
 func nameActivities(parts []CIEPart) {
 	seen := map[string]bool{}
+	cies := 0
 	for i, p := range parts {
+		if reSEEName.MatchString(p.Name) {
+			cies++
+			parts[i].Name = "SE" + strconv.Itoa(cies)
+			seen[parts[i].Name] = true
+			continue
+		}
 		if !seen[p.Name] {
+			cies++
 			seen[p.Name] = true
 			continue
 		}
