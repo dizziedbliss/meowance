@@ -143,6 +143,22 @@ func TestNameActivities(t *testing.T) {
 	}
 }
 
+// The SEE is only ever in exam history, so a dashboard test named like the see
+// is the next cie (cie3 showed up as "see" on 2026-11-20).
+func TestNameActivitiesSEEIsCIE(t *testing.T) {
+	for _, see := range []string{"SEE", "SEE3", "see 3", "SEE1"} {
+		parts := []CIEPart{{Name: "SE1"}, {Name: "SE1"}, {Name: "SE2"}, {Name: "SE2"}, {Name: see}}
+		nameActivities(parts)
+		var got []string
+		for _, p := range parts {
+			got = append(got, p.Name)
+		}
+		if want := []string{"SE1", "A1", "SE2", "A2", "SE3"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("%q: names = %v, want %v", see, got, want)
+		}
+	}
+}
+
 // One odd row (no attendance link, a "-" max, an audit course) neither vanishes
 // nor swallows the row after it.
 func TestParseDashboardOddRows(t *testing.T) {
